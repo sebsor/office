@@ -168,7 +168,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 13;
+const VERSION = 16;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -307,10 +307,10 @@ const TEAM = [
     repeat: [
       [{ t: "Mobile first, then everything else.", mood: "neutral" }],
       [{ t: "A good commit message is a gift to your future self.", mood: "happy" }]] },
-  { id: "jjo", name: "J. J. O.", role: "Middleware Developer", area: [3, 6, 13, 16],
+  { id: "jjo", name: "J. O. J.", role: "Middleware Developer", area: [3, 6, 13, 16],
     look: { skin: "#ecb995", hair: "#b5562f", style: "bald", beard: "full", glasses: true, shirt: "#6b7380" },
     intro: [
-      { t: "Hello, J. J. O., middleware. I connect the front end to everything behind it.", mood: "neutral" },
+      { t: "Hello, J. O. J., middleware. I connect the front end to everything behind it.", mood: "neutral" },
       { t: "When an API answers with something strange, come find me. I'm usually near the servers.", mood: "smirk" }],
     repeat: [
       [{ t: "The front end calls me, I call the back end, the back end calls... someone.", mood: "smirk" }],
@@ -339,12 +339,14 @@ const game = document.getElementById("game");
 const cv = document.getElementById("view");
 const g = cv.getContext("2d");
 function resize() {
+  // The whole map height always fits the screen; the width follows the camera.
   const w = game.clientWidth, h = game.clientHeight;
-  const s = Math.max(2, Math.round(Math.min(w / 320, h / 210)));
+  const mapH = MAP.length * T;
+  const s = h / mapH;
+  cv.height = mapH;
   cv.width = Math.ceil(w / s);
-  cv.height = Math.ceil(h / s);
+  cv.style.height = h + "px";
   cv.style.width = cv.width * s + "px";
-  cv.style.height = cv.height * s + "px";
   g.imageSmoothingEnabled = false;
 }
 addEventListener("resize", resize);
@@ -388,15 +390,16 @@ function Spr() {
 /* ---------- Game state ---------- */
 const state = { minutes: 9 * 60, tickAcc: 0, focus: 80, coffees: 0, met: [], introDone: false, questDone: false,
   serverPokes: 0, serverDead: false, golden: false, yogurtEaten: false, sick: 0, leaveTries: 0,
-  laptopOut: false, whips: 0, fiveDone: false, ended: false };
+  laptopOut: false, whips: 0, fiveDone: false, ended: false, standup: false };
 const PLAYER_LOOK = { skin: "#f1c29a", hair: "#2b1f1a", style: "short", beard: "none", shirt: "#2f8f8a", lanyard: true };
 const player = { seated: false, hurt: 0, autoPath: null, x: 8 * T + 8, y: 19 * T - 2, dir: "up", step: 0, stepT: 0, moving: false, look: PLAYER_LOOK };
 
 function tileFeet(c, r) { return [c * T + 8, (r + 1) * T - 2]; }
 const npcs = TEAM.map(def => {
   const [x0, x1, y0, y1] = def.area;
-  const [x, y] = def.id === "sb" ? tileFeet(9, 3) : tileFeet(Math.round((x0 + x1) / 2), y0 + ((y1 - y0) >> 1));
-  return { def, look: def.look, x, y, dir: "down", step: 0, stepT: 0, moving: false, target: null, wait: 1 + Math.random() * 3, forced: false };
+  const home = def.id === "sb" ? [9, 3] : [Math.round((x0 + x1) / 2), y0 + ((y1 - y0) >> 1)];
+  const [x, y] = tileFeet(home[0], home[1]);
+  return { def, look: def.look, home, path: null, x, y, dir: "down", step: 0, stepT: 0, moving: false, target: null, wait: 1 + Math.random() * 3, forced: false };
 });
 const SB = npcs[0];
 SB.dir = "up";
@@ -501,7 +504,7 @@ function updateCutscene(dt) {
   } else if (cut.phase === "look") {
     if (cut.t >= 0.6) { SB.dir = "down"; setPhase("notice"); }
   } else if (cut.phase === "notice") {
-    if (cut.t >= 1.4) { SB.forced = true; SB.target = tileFeet(8, 15); setPhase("approach"); }
+    if (cut.t >= 1.4) { SB.path = null; SB.forced = true; SB.target = tileFeet(8, 15); setPhase("approach"); }
   } else if (cut.phase === "approach") {
     if (!SB.target) { SB.dir = "down"; player.dir = "up"; setPhase("talk"); startIntro(); }
   }
@@ -1267,6 +1270,11 @@ function npcLines(n) {
     if (d.id === "sb") return [say(d, "I asked you to settle in. Not to ascend.", "neutral")];
     return [say(d, GOLD_REACT[(state.goldReacts = (state.goldReacts || 0) + 1) % GOLD_REACT.length], "neutral")];
   }
+  if (state.standup && !n.didStandup && state.met.includes(d.id)) {
+    n.didStandup = true;
+    const pool = STANDUP_LINES[standupGroup(d)];
+    return [say(d, pool[Math.floor(Math.random() * pool.length)], d.id === "sb" ? "smirk" : "neutral")];
+  }
   if (d.id === "sb") return sbLines();
   if (!state.met.includes(d.id)) {
     state.met.push(d.id);
@@ -1466,7 +1474,7 @@ function tryStand() {
     keys.clear();
     whip.phase = "rush"; whip.stuck = 0;
     fx.shake = 0.5; SB.shout = 1.5;
-    SB.forced = true; SB.target = tileFeet(14, 11);
+    SB.path = null; SB.forced = true; SB.target = tileFeet(14, 11);
     floater("HEY!!", SB.x, SB.y - 40, "#ffb3a8");
     return;
   }
@@ -1481,7 +1489,7 @@ function startWhip() {
   whip.phase = "coming"; whip.stuck = 0;
   keys.clear(); player.moving = false;
   fx.shake = 0.5; SB.shout = 1.5;
-  SB.forced = true; SB.target = tileFeet(Math.floor(player.x / T), 17);
+  SB.path = null; SB.forced = true; SB.target = tileFeet(Math.floor(player.x / T), 17);
   floater("HEY!!", SB.x, SB.y - 40, "#ffb3a8");
 }
 const WHIP_SHOUTS = ["FASTER!", "TYPE!", "NO BREAKS!", "SHIP IT!", "MORE TICKETS!", "WRITE TESTS!", "FOCUS!"];
@@ -1520,7 +1528,7 @@ function updateWhip(dt) {
       whip.phase = "escort"; whip.next = 0.6;
       const row12 = tileFeet(0, 12)[1];
       walkPlayer([[player.x, row12], [MY_CHAIR[0], row12]], () => { sit(); whip.phase = "guard"; whip.next = 1.2; });
-      SB.forced = true; SB.target = tileFeet(14, 11);
+      SB.path = null; SB.forced = true; SB.target = tileFeet(14, 11);
     }));
   } else if (whip.phase === "escort" || whip.phase === "guard") {
     if (whip.phase === "guard" && !SB.target) SB.dir = "left";
@@ -1539,7 +1547,7 @@ function fiveOClock() {
       say(sb, "...Five o'clock. Fine.", "neutral"),
       say(sb, "Good work today, new hire. You may go home.", "happy"),
       { t: "S. B. coils up the whip. You decide not to ask where he keeps it." },
-    ], () => { SB.forced = true; SB.target = tileFeet(9, 3); showHint("It's 5:00 pm. Walk out the door to end the day."); });
+    ], () => { SB.path = null; SB.forced = true; SB.target = tileFeet(9, 3); showHint("It's 5:00 pm. Walk out the door to end the day."); });
   } else {
     openDialog([say(sb, "It's five o'clock! Good first day. Go home, you've earned it.", "happy")],
       () => showHint("It's 5:00 pm. Walk out the door to end the day."));
@@ -1717,6 +1725,7 @@ function updatePlayer(dt) {
 function updateNpc(n, dt) {
   if (n === SB && cut.phase !== "done" && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
   if (n === SB && whip.phase && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
+  if (n.path && talkingTo !== n) { followPath(n, dt); return; }
   const near = Math.hypot(player.x - n.x, player.y - n.y) < 26;
   if (talkingTo === n || (near && !n.forced)) {
     n.moving = false; n.target = null; n.wait = 1.5;
@@ -1724,6 +1733,7 @@ function updateNpc(n, dt) {
     stepAnim(n, dt); return;
   }
   if (dlg.open && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
+  if (state.standup && !n.target) { n.moving = false; n.dir = "down"; stepAnim(n, dt); return; }
   if (n.target) {
     const [tx, ty] = n.target;
     const dx = tx - n.x, dy = ty - n.y;
@@ -1754,6 +1764,114 @@ function updateNpc(n, dt) {
     }
   }
   stepAnim(n, dt);
+}
+
+/* ---------- Path finding (breadth-first search over floor tiles) ---------- */
+function findPath(sc, sr, tc, tr) {
+  const key = (c, r) => r * MW + c;
+  const prev = new Map([[key(sc, sr), -1]]);
+  const queue = [[sc, sr]];
+  while (queue.length) {
+    const [c, r] = queue.shift();
+    if (c === tc && r === tr) {
+      const out = [];
+      let k = key(c, r);
+      while (k !== -1) { out.unshift([k % MW, Math.floor(k / MW)]); k = prev.get(k); }
+      return out;
+    }
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr, k = key(nc, nr);
+      if (prev.has(k) || solid(at(nc, nr))) continue;
+      prev.set(k, key(c, r));
+      queue.push([nc, nr]);
+    }
+  }
+  return null;
+}
+function sendNpc(n, tc, tr, done) {
+  const sc = Math.floor(n.x / T), sr = Math.floor((n.y - 2) / T);
+  const p = findPath(sc, sr, tc, tr);
+  n.target = null;
+  if (!p) { [n.x, n.y] = tileFeet(tc, tr); if (done) done(); return; }
+  n.path = p.map(([c, r]) => tileFeet(c, r));
+  n.forced = true; n.stuck = 0; n.pathDone = done || null;
+}
+function followPath(n, dt) {
+  const [tx, ty] = n.path[0];
+  const dx = tx - n.x, dy = ty - n.y;
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+    n.x = tx; n.y = ty; n.path.shift();
+    if (!n.path.length) {
+      n.path = null; n.forced = false; n.moving = false; n.dir = "down"; n.wait = 2 + Math.random() * 3;
+      const cb = n.pathDone; n.pathDone = null;
+      if (cb) cb();
+    }
+  } else {
+    const sp = 50 * dt;
+    let nx = n.x, ny = n.y;
+    if (Math.abs(dx) >= 1) { nx += Math.sign(dx) * Math.min(sp, Math.abs(dx)); n.dir = dx < 0 ? "left" : "right"; }
+    else { ny += Math.sign(dy) * Math.min(sp, Math.abs(dy)); n.dir = dy < 0 ? "up" : "down"; }
+    if (blockedAt(nx, ny, n, true)) {
+      n.moving = false; n.stuck += dt;
+      if (n.stuck > 2.5) { const last = n.path[n.path.length - 1]; n.x = last[0]; n.y = last[1]; n.path = [last]; n.stuck = 0; }
+    } else { n.x = nx; n.y = ny; n.moving = true; n.stuck = 0; }
+  }
+  stepAnim(n, dt);
+}
+
+/* ---------- Daily stand-up ---------- */
+// S. B. faces the room in front of the board; everyone else lines the wall on both sides of it,
+// leaving the tiles right under the board free so you can still reach it.
+const STANDUP_SPOTS = [[2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [11, 2], [12, 2], [13, 2], [14, 2], [15, 2]];
+const STANDUP_LINES = {
+  front: [
+    "Yesterday I fixed the header. Today I'm fixing what the header fix broke. No blockers.",
+    "Yesterday: a pull request. Today: the review comments on that pull request. Blocker: the review comments.",
+    "Pairing on the checkout flow today. No blockers, unless you count the coffee machine queue.",
+    "Still on the same ticket. It's... a big ticket. No blockers. Probably.",
+  ],
+  qa: [
+    "Yesterday I found four bugs. Today I'm going to find their friends. No blockers.",
+    "The regression run is green. I don't trust it, so I'm investigating.",
+  ],
+  middle: ["The API is up. Mostly up. Blocker: the back end team is at lunch."],
+  po: ["I've re-prioritised the backlog. Again. Questions after stand-up, please."],
+  lead: ["Let's keep it short, people. Fifteen minutes. That was a joke. It's never fifteen minutes."],
+};
+function standupGroup(d) {
+  if (d.id === "sb") return "lead";
+  if (d.id === "ps") return "po";
+  if (d.role.startsWith("QA")) return "qa";
+  if (d.role.startsWith("Middleware")) return "middle";
+  return "front";
+}
+function startStandup() {
+  state.standup = true;
+  for (const n of npcs) n.didStandup = false;
+  floater("STAND-UP!", 9 * T + 8, 1 * T + 4, "#fff3b0");
+  SB.shout = 1.2;
+  sendNpc(SB, 9, 3);
+  const others = npcs.filter(n => n !== SB).sort((a, b) => a.x - b.x);
+  others.forEach((n, i) => sendNpc(n, STANDUP_SPOTS[i][0], STANDUP_SPOTS[i][1]));
+  showHint("Stand-up! Everyone is lining up by the sprint board. Use the board again to end it.");
+}
+function endStandup() {
+  state.standup = false;
+  floater("Back to work!", 9 * T + 8, 1 * T + 4, "#fff3b0");
+  for (const n of npcs) sendNpc(n, n.home[0], n.home[1]);
+}
+function sprintBoard() {
+  if (!state.introDone || whip.phase || player.seated) return openDialog([{ t: INFO.b[0] }]);
+  if (state.standup) {
+    return openDialog([{ t: "The stand-up is in full swing. Everyone is lined up along the wall.", choices: [
+      { label: "End the stand-up", fn: endStandup },
+      { label: "Keep going", fn: () => {} },
+    ] }]);
+  }
+  openDialog([{ t: INFO.b[0], choices: [
+    { label: "Start the daily stand-up", fn: startStandup },
+    { label: "Just look", fn: () => {} },
+  ] }]);
 }
 
 function interact() {
@@ -1792,6 +1910,7 @@ function interact() {
   }
   if (ch === "m") return brewCoffee();
   if (ch === "R") return lookInMirror();
+  if (ch === "b") return sprintBoard();
   const tc = Math.floor(fx / T), tr = Math.floor(fy / T);
   if (ch === "n" || (ch === "c" && tc === 13 && tr === 11)) { state.serverPokes = 0; return sit(); }
   const pool = INFO[ch];
@@ -1852,7 +1971,7 @@ function render(time) {
   const cx = WW <= vw ? (WW - vw) / 2 : Math.max(0, Math.min(WW - vw, camX));
   const cy = WH <= vh ? (WH - vh) / 2 : Math.max(0, Math.min(WH - vh, camY));
   camX = camX + (cx - camX) * camClamp;
-  camY = camY + (cy - camY) * camClamp;
+  camY = cy;
   if (fx.shake > 0) { const m = Math.min(1, fx.shake) * 3; camX += (Math.random() - 0.5) * m * 2; camY += (Math.random() - 0.5) * m * 2; }
   camX = Math.round(camX); camY = Math.round(camY);
 

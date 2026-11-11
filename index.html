@@ -168,7 +168,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 9;
+const VERSION = 11;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -194,7 +194,7 @@ const MAP = [
   row(".cccc....cccc...", "#", "......", "#", ",,,,"),
   row("................", "#", "p....p", "#", ",,,,"),
   row(".dddd....dddn...", "#", "......", "#", ",,,,"),
-  row(".cccc....cccc...", "#", "######", "#", ",,,,"),
+  row(".cccc....cccc...", "#", "####R#", "#", ",,,,"),
   row("................", "#", "......", "#", ",,,,"),
   row("................", "#", ".TTT..", "#", ",,,,"),
   row("ss..............", "#", ".TTT..", "#", ",,,,"),
@@ -205,7 +205,7 @@ const MAP = [
   "#".repeat(30),
 ];
 const MW = 30, MH = MAP.length;
-const WALLS = "#-wbCP", OBJ = "dncpskmfxyTo";
+const WALLS = "#-wbCPR", OBJ = "dncpskmfxyTo";
 const at = (c, r) => (r < 0 || r >= MH || c < 0 || c >= MW) ? "#" : MAP[r][c];
 const isWall = ch => WALLS.includes(ch);
 const isDesk = ch => ch === "d" || ch === "n";
@@ -405,7 +405,7 @@ SB.crack = 0; SB.shout = 0;
 /* ---------- Effects: timers, particles, flash, screen shake ---------- */
 const timers = [];
 const after = (sec, fn) => timers.push({ t: sec, fn });
-const busy = () => timers.length > 0 || !!player.autoPath || fx.puke > 0 || fx.ascend > 0 || state.ended
+const busy = () => timers.length > 0 || !!player.autoPath || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
   || whip.phase === "coming" || whip.phase === "escort" || whip.phase === "rush";
 const whip = { phase: null, stuck: 0, next: 0 };
 const floaters = [];
@@ -481,7 +481,8 @@ function playerLook() {
   // during the transformation the hair flickers between dark and blonde
   const flicker = fx.ascend > 1.1 && Math.floor(fx.ascend * (6 + fx.ascend * 4)) % 2 === 0;
   const base = state.golden || flicker ? GOLD_LOOK : PLAYER_LOOK;
-  return state.sick > 0 ? { ...base, skin: "#b9d38f" } : base;
+  return { ...base, skin: state.sick > 0 ? "#b9d38f" : base.skin, sick: state.sick > 0,
+    soot: state.serverDead, pukeStain: state.yogurtEaten, aura: state.golden };
 }
 
 /* ---------- Opening cutscene ----------
@@ -489,7 +490,7 @@ function playerLook() {
    look: a short beat   notice: S. B. spots you, "!" pops   approach: he walks over   talk: welcome dialogue */
 const cut = { phase: "fade", t: 0, walk: tileFeet(8, 16)[1], arrived: false };
 const fadeEl = document.getElementById("fade");
-let camFX = player.x, camFY = player.y;
+let camFX = player.x, camFY = player.y, camClamp = 1;
 function setPhase(p) { cut.phase = p; cut.t = 0; }
 function updateCutscene(dt) {
   if (cut.phase === "done") return;
@@ -595,6 +596,21 @@ function drawWall(c, r, px, py, ch) {
     const ma = ((m % 60) / 60) * Math.PI * 2, ha = (((m / 60) % 12) / 12) * Math.PI * 2;
     pline(px + 8, py + 7, Math.round(px + 8 + Math.sin(ma) * 3), Math.round(py + 7 - Math.cos(ma) * 3), C.out);
     pline(px + 8, py + 7, Math.round(px + 8 + Math.sin(ha) * 2), Math.round(py + 7 - Math.cos(ha) * 2), "#c0443b");
+  } else if (ch === "R") {
+    // mirror, with a tiny reflection when you stand in front of it
+    F(px + 2, py + 1, 12, 12, C.out);
+    F(px + 3, py + 2, 10, 10, "#c9d0d6");
+    F(px + 4, py + 3, 8, 8, "#cfe3ea");
+    F(px + 4, py + 3, 8, 3, "#dcecf1");
+    const pc = Math.floor(player.x / T), pr = Math.floor((player.y - 2) / T);
+    if (pc === c && pr === r + 1 && !player.seated) {
+      const L = player.look;
+      F(px + 6, py + 8, 4, 3, L.shirt);
+      F(px + 6, py + 5, 4, 3, L.skin);
+      F(px + 6, py + 4, 4, 1, L.hair);
+      if (L.style === "spiky") { F(px + 5, py + 3, 1, 2, L.hair); F(px + 7, py + 3, 1, 1, L.hair); F(px + 10, py + 3, 1, 2, L.hair); }
+    }
+    F(px + 5, py + 4, 1, 1, "#ffffff"); F(px + 6, py + 3, 1, 1, "#ffffff"); F(px + 10, py + 9, 1, 1, "#ffffff");
   } else if (ch === "P") {
     F(px + 3, py + 2, 10, 11, C.out);
     F(px + 4, py + 3, 8, 9, "#3d5a80");
@@ -868,6 +884,8 @@ function drawPerson(e) {
   if (dir === "down") {
     if (L.collar) s.d(x - 2, y - 14 + b, 4, 2, L.collar);
     if (L.hoodie) { s.d(x - 2, y - 13 + b, 1, 3, "#e9e4da"); s.d(x + 1, y - 13 + b, 1, 3, "#e9e4da"); }
+    if (L.pukeStain) { s.d(x + 1, y - 9 + b, 2, 1, "#b8c94a"); s.d(x - 4, y - 7 + b, 1, 1, "#d6d66a"); s.d(x + 3, y - 12 + b, 1, 1, "#9aa83a"); }
+    if (L.soot) { s.d(x - 4, y - 18 + b, 1, 1, "#3a3030"); s.d(x + 2, y - 21 + b, 2, 1, "#3a3030"); s.d(x - 5, y - 11 + b, 2, 2, "#3a3030"); s.d(x + 3, y - 8 + b, 1, 1, "#3a3030"); }
     if (L.lanyard) { s.d(x - 1, y - 14 + b, 1, 4, "#e9d36a"); s.d(x - 2, y - 10 + b, 3, 3, "#f4f1e8"); s.d(x - 2, y - 10 + b, 3, 1, "#2f8f8a"); }
     if (L.beard === "full") { s.d(x - 4, y - 17 + b, 8, 3, H); s.d(x - 5, y - 19 + b, 1, 3, H); s.d(x + 4, y - 19 + b, 1, 3, H); s.d(x - 1, y - 16 + b, 2, 1, "#7a3a32"); }
     if (L.beard === "stubble") s.d(x - 3, y - 16 + b, 6, 2, shade(L.skin, 0.85));
@@ -1019,6 +1037,11 @@ function drawPortrait(L, mood) {
   pg.clearRect(0, 0, 48, 48);
   const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
   if (L.robot) { P(0, 0, 48, 48, "#24485c"); P(0, 0, 48, 12, "#2a5268"); }
+  if (L.aura) {
+    P(0, 0, 48, 48, "#f6c843");
+    for (let i = 0; i < 12; i++) P(i * 4, 6 + ((i * 7) % 11), 3, 48, i % 2 ? "#ffe680" : "#ffd24a");
+    P(8, 14, 32, 34, "rgba(255,248,210,.55)");
+  }
   const skin = L.skin, sk2 = shade(skin, 0.86), H = L.hair, H2 = shade(H, 0.72), hi = shade(H, 1.3);
   const fr = "#3a2a2a", lens = "#dce9ef", lip = "#7a3a32";
   const s = Spr();
@@ -1032,6 +1055,11 @@ function drawPortrait(L, mood) {
     case "buzz": s.r(12, 6, 24, 6, H); s.r(11, 10, 2, 7, H); s.r(35, 10, 2, 7, H); break;
     case "curly": s.r(9, 3, 30, 10, H); s.r(7, 7, 5, 12, H); s.r(36, 7, 5, 12, H); s.r(12, 1, 8, 3, H); s.r(22, 0, 8, 4, H); s.r(31, 2, 6, 3, H); break;
     case "bald": s.r(9, 15, 4, 8, H); s.r(35, 15, 4, 8, H); break;
+    case "spiky":
+      s.r(11, 5, 26, 8, H);
+      s.r(7, 4, 5, 11, H); s.r(12, 1, 5, 9, H); s.r(18, 0, 5, 8, H); s.r(24, 0, 5, 8, H); s.r(30, 1, 5, 9, H); s.r(36, 4, 5, 11, H);
+      s.r(8, 10, 4, 12, H); s.r(36, 10, 4, 12, H);
+      break;
     default: s.r(11, 5, 26, 7, H); s.r(9, 8, 4, 11, H); s.r(35, 8, 4, 11, H); s.r(14, 3, 8, 3, H); s.r(25, 3, 9, 3, H);
   }
   if (L.beard === "full") { s.r(12, 26, 24, 7, H); s.r(15, 33, 18, 4, H); }
@@ -1055,6 +1083,11 @@ function drawPortrait(L, mood) {
       P(11, 11, 26, 3, H); P(16, 13, 4, 1, H2); P(29, 13, 4, 1, H2);
       break;
     case "bald": P(18, 12, 6, 1, shade(skin, 1.12)); P(20, 13, 3, 1, shade(skin, 1.12)); break;
+    case "spiky":
+      P(13, 11, 5, 5, H); P(19, 11, 3, 3, H); P(24, 11, 3, 4, H); P(29, 11, 6, 5, H);
+      for (const [x, y] of [[9, 6], [14, 3], [20, 2], [26, 2], [32, 3], [38, 6]]) P(x, y, 2, 3, "#fff6c2");
+      P(17, 6, 2, 4, H2); P(28, 6, 2, 4, H2);
+      break;
     default:
       P(12, 11, 6, 3, H); P(17, 11, 4, 2, H); P(27, 11, 9, 3, H); P(31, 14, 4, 2, H);
       P(13, 6, 3, 2, H2); P(21, 5, 2, 2, H2); P(30, 7, 3, 2, H2); P(10, 13, 2, 3, H2);
@@ -1073,6 +1106,7 @@ function drawPortrait(L, mood) {
     P(15, 20, 1, 1, "#ffffff"); P(26, 20, 1, 1, "#ffffff");
   }
   if (mood === "happy") { P(17, 21, 3, 1, C.out); P(28, 21, 3, 1, C.out); P(17, 22, 1, 1, C.out); P(30, 22, 1, 1, C.out); }
+  else if (L.eyes) { P(18, 21, 2, 2, L.eyes); P(29, 21, 2, 2, L.eyes); P(19, 22, 1, 1, C.out); P(30, 22, 1, 1, C.out); P(18, 21, 1, 1, "#ffffff"); P(29, 21, 1, 1, "#ffffff"); }
   else { P(18, 21, 2, 2, C.out); P(29, 21, 2, 2, C.out); if (!L.glasses) { P(18, 21, 1, 1, "#ffffff"); P(29, 21, 1, 1, "#ffffff"); } }
   if (L.lashes) { P(17, 20, 1, 1, C.out); P(31, 20, 1, 1, C.out); }
 
@@ -1092,7 +1126,19 @@ function drawPortrait(L, mood) {
   if (mood === "angry") { P(20, 30, 8, 4, "#5a2420"); P(21, 30, 6, 1, "#f7f3ea"); P(22, 33, 4, 1, "#b5584a"); }
   else if (mood === "happy") { P(20, 31, 8, 1, lip); P(21, 32, 6, 1, "#b5584a"); }
   else if (mood === "smirk") { P(22, 31, 5, 1, lip); P(27, 30, 1, 1, lip); }
+  else if (mood === "queasy") { P(21, 31, 6, 1, lip); P(22, 32, 2, 1, lip); P(26, 30, 1, 1, lip); }
   else P(21, 31, 6, 1, lip);
+  if (L.soot) {
+    const ash = "rgba(45,35,35,.65)";
+    P(13, 24, 4, 2, ash); P(31, 16, 4, 2, ash); P(26, 27, 3, 2, ash); P(16, 13, 3, 1, ash); P(33, 25, 2, 2, ash);
+    P(9, 42, 5, 3, "#3a3030"); P(31, 44, 4, 2, "#3a3030"); P(12, 38, 2, 2, "#3a3030");
+    P(15, 1, 1, 4, H2); P(33, 0, 1, 3, H2);
+    P(36, 0, 4, 2, "rgba(130,125,135,.75)"); P(39, 2, 3, 2, "rgba(130,125,135,.55)");
+  }
+  if (L.pukeStain) {
+    P(14, 40, 4, 2, "#b8c94a"); P(24, 43, 3, 2, "#d6d66a"); P(30, 39, 3, 3, "#9aa83a"); P(20, 45, 2, 2, "#b8c94a");
+    if (L.sick) { P(22, 33, 2, 2, "#b8c94a"); P(23, 35, 1, 1, "#9aa83a"); }
+  }
   if (L.robot) {
     for (let y = 0; y < 48; y += 2) P(0, y, 48, 1, "rgba(0,0,0,.10)");
     P(0, 0, 48, 2, "#2b2f3a"); P(0, 46, 48, 2, "#2b2f3a"); P(0, 0, 2, 48, "#2b2f3a"); P(46, 0, 2, 48, "#2b2f3a");
@@ -1266,10 +1312,24 @@ function brewCoffee() {
   updateHud();
 }
 
+/* Big moments happen on top of the kitchen table, away from the HUD in the corner */
+const TABLE_TOP = [27 * T, 6 * T + 8];
+function jumpTo(tx, ty, done) {
+  keys.clear();
+  player.jump = { sx: player.x, sy: player.y, tx, ty, t: 0, dur: 0.55, h: 18, done };
+  player.dir = ty < player.y ? "up" : "down";
+}
+function jumpOnTable(done) {
+  jumpTo(TABLE_TOP[0], TABLE_TOP[1], () => { player.onTable = true; player.dir = "down"; floater("Hup!", player.x, player.y - 32); if (done) done(); });
+}
+function jumpOffTable() {
+  const [x, y] = tileFeet(26, 7);
+  jumpTo(x, y, () => { player.onTable = false; });
+}
 function becomeGolden() {
-  // starts the transformation; updateAscend() plays it out and calls ascendBurst() at the end
-  keys.clear(); player.moving = false;
-  fx.ascend = 0.001; fx.screams = 0;
+  // jump on the table, then updateAscend() plays the transformation and calls ascendBurst() at the end
+  player.moving = false;
+  jumpOnTable(() => { fx.ascend = 0.001; fx.screams = 0; });
 }
 const SCREAMS = [[0.55, "AAAH!"], [1.25, "AAAAAAH!!"], [1.95, "AAAAAAAAAAH!!!"]];
 function updateAscend(dt) {
@@ -1296,21 +1356,23 @@ function ascendBurst() {
   burst(20, player.x, player.y - 4, { angle: -Math.PI / 2, spread: 0.7, speed: [40, 80], life: [0.8, 1.4], size: [1, 2], colors: ["#fff3b0", "#ffffff"], fade: true });
   updateHud();
   after(1.1, () => openDialog([
-    { t: "The third coffee hits. You turn around. You SCREAM. The floor shakes. Your hair turns blonde and starts floating." },
+    { t: "The third coffee hits. You leap onto the kitchen table. You SCREAM. The floor shakes. Your hair turns blonde and starts floating." },
     { t: "You have ascended. You are now a GOLDEN GOD of productivity. Merge conflicts fear you, and your focus will never run out again." },
-  ]));
+  ], jumpOffTable));
 }
 function eatYogurt() {
   state.yogurtEaten = true;
-  openDialog([{ t: "You peel the lid and eat it in three spoonfuls. It's... fizzy? Yogurt shouldn't be fizzy." }], () => {
+  openDialog([{ t: "You peel the lid and eat it in three spoonfuls. It's... fizzy? Yogurt shouldn't be fizzy." }], () => jumpOnTable(() => {
     state.sick = 30;
     fx.shake = 0.25;
+    floater("Uh oh...", player.x, player.y - 32, "#d6e6a0");
     after(1.0, () => {
       fx.puke = 1.3; fx.shake = 1.3;
       after(1.6, () => {
         const [dx, dy] = DIRV[player.dir];
         let px = player.x + dx * 14, py = player.y + (dy > 0 ? 12 : dy < 0 ? -6 : 2);
-        if (solid(at(Math.floor(px / T), Math.floor(py / T)))) { px = player.x; py = player.y + 2; }
+        if (player.onTable) { px = player.x; py = tileFeet(0, 7)[1] - 3; }
+        else if (solid(at(Math.floor(px / T), Math.floor(py / T)))) { px = player.x; py = player.y + 2; }
         decals.push({ x: px, y: py });
         state.focus = Math.max(0, state.focus - 30);
         updateHud();
@@ -1318,10 +1380,23 @@ function eatYogurt() {
           { t: "BLEEEEARGH." },
           { t: state.golden ? "Even a golden god has limits. Focus -30." : "You feel green. Literally. Focus -30." },
           say(BYID.mr, "That yogurt has been expired since March. It was a known issue, you know.", "smirk"),
-        ]);
+        ], jumpOffTable);
       });
     });
-  });
+  }));
+}
+function lookInMirror() {
+  state.serverPokes = 0;
+  const L = playerLook();
+  const me = { name: "You", role: "New hire, reflected", look: L };
+  const lines = [];
+  if (state.golden) lines.push({ who: me, mood: "happy", t: "A golden god stares back at you. The hair has not stopped floating. You're not sure it ever will." });
+  if (L.sick) lines.push({ who: me, mood: "queasy", t: "You look... green. Very green. The yogurt is still negotiating with your stomach." });
+  else if (state.yogurtEaten) lines.push({ who: me, mood: "neutral", t: "There's still yogurt on your shirt. Nobody has said anything. Everybody has noticed." });
+  if (state.serverDead) lines.push({ who: me, mood: "neutral", t: "Your face is covered in soot, and your eyebrows smell faintly of burnt plastic." });
+  if (state.golden && state.yogurtEaten && state.serverDead) lines.push({ who: me, mood: "smirk", t: "Golden, sooty and stained. Quite the first day." });
+  if (!lines.length) lines.push({ who: me, mood: "happy", t: "It's you. First-day haircut, first-day outfit, lanyard and all. Looking sharp." });
+  openDialog(lines);
 }
 function explodeServer() {
   state.serverDead = true; state.serverPokes = 0;
@@ -1564,6 +1639,24 @@ function updatePlayer(dt) {
     return;
   }
   player.look = playerLook();
+  if (player.jump) {
+    const j = player.jump;
+    j.t += dt;
+    const k = Math.min(1, j.t / j.dur);
+    player.x = j.sx + (j.tx - j.sx) * k;
+    player.y = j.sy + (j.ty - j.sy) * k;
+    player.lift = Math.sin(k * Math.PI) * j.h;
+    player.moving = false;
+    if (k >= 1) {
+      player.lift = 0; player.jump = null;
+      fx.shake = Math.max(fx.shake, 0.15);
+      burst(6, player.x, player.y, { jitter: 10, angle: -Math.PI / 2, spread: 2.4, speed: [10, 30], life: [0.2, 0.4], size: [1, 1], colors: ["#d3c5ab", "#f7f3ea"], fade: true });
+      if (j.done) j.done();
+    }
+    stepAnim(player, dt);
+    return;
+  }
+  if (player.onTable) { player.moving = false; stepAnim(player, dt); return; }
   if (player.autoPath) {
     const [tx, ty] = player.autoPath[0];
     const dx = tx - player.x, dy = ty - player.y, sp = 70 * dt;
@@ -1684,6 +1777,7 @@ function interact() {
     ] }]);
   }
   if (ch === "m") return brewCoffee();
+  if (ch === "R") return lookInMirror();
   const tc = Math.floor(fx / T), tr = Math.floor(fy / T);
   if (ch === "n" || (ch === "c" && tc === 13 && tr === 11)) { state.serverPokes = 0; return sit(); }
   const pool = INFO[ch];
@@ -1741,8 +1835,10 @@ function updateTime(dt) {
 function render(time) {
   const vw = cv.width, vh = cv.height, WW = MW * T, WH = MH * T;
   let camX = camFX - vw / 2, camY = camFY - 10 - vh / 2;
-  camX = WW <= vw ? (WW - vw) / 2 : Math.max(0, Math.min(WW - vw, camX));
-  camY = WH <= vh ? (WH - vh) / 2 : Math.max(0, Math.min(WH - vh, camY));
+  const cx = WW <= vw ? (WW - vw) / 2 : Math.max(0, Math.min(WW - vw, camX));
+  const cy = WH <= vh ? (WH - vh) / 2 : Math.max(0, Math.min(WH - vh, camY));
+  camX = camX + (cx - camX) * camClamp;
+  camY = camY + (cy - camY) * camClamp;
   if (fx.shake > 0) { const m = Math.min(1, fx.shake) * 3; camX += (Math.random() - 0.5) * m * 2; camY += (Math.random() - 0.5) * m * 2; }
   camX = Math.round(camX); camY = Math.round(camY);
 
@@ -1767,12 +1863,15 @@ function render(time) {
     }
   }
   for (const d of decals) drawPuddle(d);
-  for (const e of chars) list.push({ k: e.y, f: () => {
+  for (const e of chars) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.y, f: () => {
+    const lift = e === player ? Math.round(player.lift || 0) : 0;
+    if (lift) { F(Math.round(e.x) - 5, Math.round(e.y) - 1, 10, 2, "rgba(20,10,20,.25)"); e.y -= lift; }
     if (e === player && (state.golden || (fx.ascend > 1.1 && Math.floor(time * 14) % 2 === 0))) drawAura(e, time, fx.ascend > 0 ? 1.4 : 1);
     if (e === player && player.hurt > 0) {
       const ox = Math.random() < 0.5 ? -1 : 1, x0 = e.x;
       e.x += ox; drawPerson(e); e.x = x0;
     } else drawPerson(e);
+    if (lift) e.y += lift;
   } });
   list.sort((a, b) => a.k - b.k);
   for (const it of list) it.f();
@@ -1807,6 +1906,8 @@ function loop(t) {
   if (SB.shout > 0) SB.shout = Math.max(0, SB.shout - dt);
   updatePlayer(dt);
   for (const n of npcs) updateNpc(n, dt);
+  const wantClamp = player.onTable || player.jump ? 0 : 1;
+  camClamp += (wantClamp - camClamp) * Math.min(1, dt * 2.5);
   const f = camFocus(), k = Math.min(1, dt * 3.2);
   camFX += (f.x - camFX) * k; camFY += (f.y - camFY) * k;
   updateTime(dt);

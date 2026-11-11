@@ -176,7 +176,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 20;
+const VERSION = 21;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -1037,6 +1037,44 @@ function drawPhoneInHands(e) {
   F(x - 2, y - 12, 4, 4, glow);
   F(x - 4, y - 9, 2, 2, e.look.skin); F(x + 2, y - 9, 2, 2, e.look.skin);
 }
+function mixHex(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = s => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+  return "#" + [16, 8, 0].map(s => ch(s).toString(16).padStart(2, "0")).join("");
+}
+function drawBody(n) {
+  const L = n.look, x = Math.round(n.x), y = Math.round(n.y);
+  F(x - 11, y - 1, 22, 3, "rgba(20,10,20,.22)");
+  const s = Spr();
+  if (L.robot) {
+    // robot tipped over on its side, screen dark
+    s.r(x - 10, y - 6, 5, 7, "#3a3f4a");
+    s.r(x - 5, y - 4, 9, 2, "#9aa3ad");
+    s.r(x + 4, y - 9, 8, 10, "#2b2f3a");
+    s.d(x + 5, y - 8, 6, 8, "#14181f");
+    s.d(x + 6, y - 5, 4, 1, "#3a4a5a");
+    s.draw(g);
+    return;
+  }
+  const pale = mixHex(L.skin, "#d8dde6", 0.55), pants = L.pants || "#3b4a6b";
+  // lying on their back, head to the left
+  if (L.style === "long") s.r(x - 13, y - 7, 4, 9, L.hair);
+  s.r(x - 3, y - 6, 8, 7, L.shirt);
+  s.r(x + 5, y - 5, 6, 5, pants);
+  s.r(x + 11, y - 5, 2, 2, "#2a2230"); s.r(x + 11, y - 2, 2, 2, "#2a2230");
+  s.r(x - 10, y - 6, 7, 7, pale);
+  if (L.style !== "bald") s.r(x - 11, y - 6, 2, 7, L.hair);
+  s.d(x - 2, y - 1, 6, 1, shade(L.shirt, 0.78));
+  s.d(x - 8, y - 4, 1, 1, C.out); s.d(x - 8, y - 1, 1, 1, C.out);
+  if (L.glasses) { s.d(x - 9, y - 5, 3, 1, "#3a2a2a"); s.d(x - 9, y - 2, 3, 1, "#3a2a2a"); }
+  if (L.beard === "full") s.d(x - 5, y - 5, 2, 5, L.hair);
+  s.d(x - 4, y - 4, 1, 1, "#9b1b30"); s.d(x - 4, y - 2, 1, 1, "#9b1b30");
+  s.draw(g);
+  // dizzy stars circling the head
+  const t = performance.now() / 300 + n.x;
+  F(x - 7 + Math.round(Math.cos(t) * 4), y - 10 + Math.round(Math.sin(t) * 2), 1, 1, "#fff3b0");
+  F(x - 7 + Math.round(Math.cos(t + 3.1) * 4), y - 10 + Math.round(Math.sin(t + 3.1) * 2), 1, 1, "#fff3b0");
+}
 function drawBubble(x, y) {
   x = Math.round(x); y = Math.round(y) - (Math.floor(performance.now() / 400) % 2);
   F(x - 7, y - 6, 14, 9, C.out);
@@ -1844,7 +1882,10 @@ function updatePlayer(dt) {
   checkLeave();
 }
 function updateNpc(n, dt) {
-  if (n.gone) return;
+  if (n.gone) {
+    if (n.body && !n.look.robot && Math.random() < dt * 0.3) floater("z", n.x - 8, n.y - 12, "#dfe7f2");
+    return;
+  }
   if (state.vamp) {
     if (n === SD) { updateVamp(n, dt); return; }
     // everyone else freezes in terror and stares at the Count
@@ -1942,15 +1983,15 @@ function transformSD() {
   }));
 }
 function vampBite(prey) {
-  prey.gone = true;
+  prey.gone = true; prey.body = true; prey.lift = 0;
   if (prey.look.robot) {
     state.robotsOff = (state.robotsOff || 0) + 1;
     burst(14, prey.x, prey.y - 20, { speed: [20, 60], gravity: 90, life: [0.3, 0.7], size: [1, 2], colors: ["#f2c46d", "#7fd1e8", "#ffffff"] });
     floater("CALL ENDED", prey.x, prey.y - 34, "#9fd8ff");
   } else {
     state.bitten = (state.bitten || 0) + 1;
-    burst(22, prey.x, prey.y - 14, { angle: -Math.PI / 2, spread: 1.6, speed: [25, 70], life: [0.7, 1.3], size: [2, 2], colors: ["#2a2030", "#4a3a5a", "#1a1420"], fade: true });
-    floater("*poof* bats!", prey.x, prey.y - 30, "#d9c8ff");
+    burst(10, prey.x, prey.y - 14, { angle: -Math.PI / 2, spread: 1.4, speed: [15, 40], life: [0.5, 0.9], size: [1, 2], colors: ["#fff3b0", "#ffffff"], fade: true });
+    floater("*faints*", prey.x, prey.y - 30, "#d9c8ff");
   }
   floater(VAMP_TAUNTS[Math.floor(Math.random() * VAMP_TAUNTS.length)], SD.x, SD.y - 36, "#ff9aa8");
   fx.shake = Math.max(fx.shake, 0.25);
@@ -2002,7 +2043,7 @@ function updateVamp(n, dt) {
         floater("Ah-ha-ha-haaa!", 13 * T + 8, 1 * T, "#ff9aa8");
         after(1.2, () => openDialog([
           { t: "Count S. D. bursts through the window next to the clock and flutters off into the night as a cloud of bats." },
-          { t: "The office is silent. Somewhere, a pager starts beeping. Nobody answers it." },
+          { t: "The office is silent, apart from some faint snoring from the floor. Somewhere, a pager starts beeping. Nobody answers it." },
           { t: "There's nothing left for you here. Maybe it's time to leave the building." },
         ], () => showHint("Leave the building through the door to start over.")));
       }
@@ -2023,7 +2064,7 @@ function endVampire() {
   if (state.yogurtEaten) titles.push("Iron Stomach (Almost)");
   if (cat.pets >= 5) titles.push("Cat Person");
   showEnd("Secret ending", titles, [
-    ["Colleagues turned into bats", state.bitten || 0],
+    ["Colleagues left on the floor", state.bitten || 0],
     ["Robots disconnected", state.robotsOff || 0],
     ["Windows broken", 1],
     ["Team members met", `${metCount()}/${TOTAL}`],
@@ -2396,6 +2437,12 @@ function interact() {
   const [dx, dy] = DIRV[player.dir];
   const fx = player.x + dx * 12, fy = player.y - 3 + dy * 12;
   if (Math.hypot(fx - cat.x, fy - (cat.y - 4)) < 11) return petCat();
+  for (const n of npcs) {
+    if (!n.body || Math.hypot(fx - n.x, fy - (n.y - 3)) > 14) continue;
+    state.serverPokes = 0;
+    if (n.look.robot) return openDialog([{ t: `${n.def.name}'s robot lies on its side. The screen says: Call ended. Reconnect?` }]);
+    return openDialog([{ t: `${n.def.name} is out cold on the floor. Two tiny bite marks on the neck. They're snoring, so they'll probably be fine after a coffee.` }]);
+  }
   let best = null, bd = 13;
   for (const n of npcs) {
     if (n.gone) continue;
@@ -2523,6 +2570,7 @@ function render(time) {
   for (const d of decals) drawPuddle(d);
   list.push({ k: cat.y, f: drawCat });
   for (const o of outsiders) list.push({ k: o.y, f: () => drawPerson(o) });
+  for (const n of npcs) if (n.gone && n.body) list.push({ k: n.y - 12, f: () => drawBody(n) });
   for (const e of chars) if (!e.gone) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.y, f: () => {
     const lift = Math.round(e.lift || 0);
     if (lift) { F(Math.round(e.x) - 5, Math.round(e.y) - 1, 10, 2, "rgba(20,10,20,.25)"); e.y -= lift; }

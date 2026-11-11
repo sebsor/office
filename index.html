@@ -137,7 +137,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 
   <div id="fade" aria-hidden="true">
     <p class="fade-day" id="fadeDay">Wednesday</p>
-    <p class="fade-sub">Day 1 · Your first day on the team</p>
+    <p class="fade-sub" id="fadeSub">Day 1 · Your first day on the team</p>
     <p class="fade-ver" data-version></p>
   </div>
 
@@ -176,7 +176,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 21;
+const VERSION = 22;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -420,7 +420,7 @@ SB.crack = 0; SB.shout = 0;
 /* ---------- Effects: timers, particles, flash, screen shake ---------- */
 const timers = [];
 const after = (sec, fn) => timers.push({ t: sec, fn });
-const busy = () => timers.length > 0 || !!player.autoPath || state.vamp === "approach" || state.vamp === "talk" || state.vamp === "escape" || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
+const busy = () => timers.length > 0 || fade.on || !!player.autoPath || state.vamp === "approach" || state.vamp === "talk" || state.vamp === "escape" || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
   || whip.phase === "coming" || whip.phase === "escort" || whip.phase === "rush";
 const whip = { phase: null, stuck: 0, next: 0 };
 const floaters = [];
@@ -499,6 +499,7 @@ function playerLook() {
   const base = state.golden || flicker ? GOLD_LOOK : PLAYER_LOOK;
   const look = { ...base, skin: state.sick > 0 ? "#b9d38f" : base.skin, sick: state.sick > 0,
     soot: state.serverDead, pukeStain: state.yogurtEaten, aura: state.golden };
+  if (state.retro) Object.assign(look, { shirt: "#e2408f", pants: "#4a6fa8", hoodie: false });
   if (state.masked) Object.assign(look, { skin: "#d8dde6", hair: "#121014", style: "vamp", eyes: "#d6453a", fangs: true });
   return look;
 }
@@ -677,7 +678,13 @@ function drawDesk(c, r, px, py, time, mine) {
   if (!L) F(px, py + 1, 1, 15, C.out);
   if (!R) F(px + 15, py + 1, 1, 15, C.out);
   if (mine) {
-    if (state.laptopOut) {
+    if (state.laptopOut && state.retro) {
+      F(px + 1, py - 6, 12, 12, C.out); F(px + 2, py - 5, 10, 10, "#d9d0bc");
+      F(px + 3, py - 4, 8, 6, "#0f1a0f");
+      const sc = player.seated ? Math.floor(time * 6) : 0;
+      for (let i = 0; i < 2; i++) F(px + 4, py - 3 + i * 2, 2 + ((sc + i * 3) % 5), 1, "#5fd35f");
+      F(px + 3, py + 6, 8, 2, "#cfc4aa");
+    } else if (state.laptopOut) {
       // open laptop with scrolling code
       F(px + 2, py - 4, 10, 9, C.out); F(px + 3, py - 3, 8, 7, "#14263a");
       const sc = player.seated ? Math.floor(time * 6) : 0;
@@ -693,6 +700,16 @@ function drawDesk(c, r, px, py, time, mine) {
     disc(px + 13 + sway, py - 14, 5, C.out);
     disc(px + 13 + sway, py - 14, 4, "#e2574c");
     F(px + 11 + sway, py - 17, 2, 2, "#f4a49c");
+    return;
+  }
+  if (state.retro) {
+    // beige CRT with green text
+    F(px + 1, py - 7, 13, 13, C.out); F(px + 2, py - 6, 11, 11, "#d9d0bc"); F(px + 2, py - 6, 11, 1, "#ece4d0");
+    F(px + 3, py - 5, 9, 7, "#0f1a0f");
+    F(px + 4, py - 4, 1 + (n & 3), 1, "#5fd35f"); F(px + 4, py - 2, 2 + ((n >>> 3) & 3), 1, "#5fd35f");
+    if (Math.floor(time * 2 + (n & 7)) % 2) F(px + 9, py - 2, 1, 1, "#5fd35f");
+    F(px + 11, py + 3, 1, 1, "#6ee07a");
+    F(px + 3, py + 7, 9, 2, "#cfc4aa"); F(px + 3, py + 9, 9, 1, "#a99d84");
     return;
   }
   const mx = px + 3, my = py - 4;
@@ -822,7 +839,14 @@ function drawObject(ch, c, r, px, py, time) {
     case "c": return drawChair(px, py);
     case "p": return drawPlant(px, py);
     case "s": return drawServer(px, py, time);
-    case "k": return drawCounter(c, r, px, py);
+    case "k":
+      drawCounter(c, r, px, py);
+      if (state.retro && c === 27) {
+        F(px + 2, py - 5, 12, 9, C.out); F(px + 3, py - 4, 10, 7, "#d9d0bc");
+        F(px + 4, py - 8, 8, 5, "#ffffff"); F(px + 5, py - 7, 5, 1, "#9aa3ad"); F(px + 5, py - 5, 4, 1, "#9aa3ad");
+        F(px + 10, py - 2, 2, 1, Math.floor(time * 3) % 2 ? "#6ee07a" : "#2f7a3a");
+      }
+      return;
     case "m": drawCounter(c, r, px, py); return drawCoffee(px, py, time);
     case "f": return drawFridge(px, py);
     case "x": return drawTable(c, r, px, py, "x", "#a8703f", "#7a4d2a", null);
@@ -842,7 +866,7 @@ function drawObject(ch, c, r, px, py, time) {
 
 /* ---------- Characters (world sprite) ---------- */
 function drawPerson(e) {
-  const L = e.look;
+  const L = state.retro && e !== player ? retroize(e.look) : e.look;
   if (L.robot) return drawRobot(e);
   const x = Math.round(e.x), y = Math.round(e.y), mv = e.moving, st = e.step;
   const b = mv && (st & 1) ? -1 : 0;
@@ -977,7 +1001,7 @@ function drawPerson(e) {
   s.draw(g);
 }
 function drawRobot(e) {
-  const L = e.look;
+  const L = state.retro ? retroize(e.look) : e.look;
   const x = Math.round(e.x), y = Math.round(e.y), dir = e.dir;
   const side = dir === "left" || dir === "right", left = dir === "left";
   const roll = e.moving ? (e.step & 1) : 0;
@@ -1011,7 +1035,7 @@ function drawRobot(e) {
     return;
   }
   const sx = x - 6, sy = y - 27;
-  F(sx, sy, 12, 10, "#24485c");
+  F(sx, sy, 12, 10, state.retro ? "#2a3a2a" : "#24485c");
   F(sx, sy, 12, 1, "#2f5a70");
   // tiny face on the screen
   const H = L.hair, sk = L.skin;
@@ -1024,6 +1048,7 @@ function drawRobot(e) {
   F(sx + 4, sy + 5, 1, 1, C.out); F(sx + 7, sy + 5, 1, 1, C.out);
   if (L.beard === "stubble" || L.beard === "full") F(sx + 4, sy + 7, 4, 1, shade(sk, 0.82));
   else F(sx + 5, sy + 7, 2, 1, shade(sk, 0.78));
+  if (state.retro) for (let i = 0; i < 6; i++) F(sx + Math.floor(Math.random() * 12), sy + Math.floor(Math.random() * 10), 1, 1, "rgba(255,255,255,.45)");
   // scanline shimmer
   const scan = Math.floor(performance.now() / 120) % 10;
   F(sx, sy + scan, 12, 1, "rgba(255,255,255,.12)");
@@ -1340,7 +1365,7 @@ function showLine() {
     dlgPort.hidden = false;
     dlgName.textContent = l.who.name;
     dlgRole.textContent = l.who.role;
-    drawPortrait(l.who.look, l.mood || "neutral");
+    drawPortrait(state.retro && l.who !== MAUI_WHO && l.who.name !== "You" ? retroize(l.who.look) : l.who.look, l.mood || "neutral");
   } else dlgPort.hidden = true;
   dlg.shown = 0; dlg.rendered = -1; dlg.sel = 0; dlg.choicesShown = false;
   dlgChoices.hidden = true;
@@ -1420,6 +1445,12 @@ function npcLines(n) {
     n.didStandup = true;
     const pool = STANDUP_LINES[standupGroup(d)];
     return [say(d, pool[Math.floor(Math.random() * pool.length)], d.id === "sb" ? "smirk" : "neutral")];
+  }
+  if (state.retro && state.met.includes(d.id)) {
+    if (d.look.robot) return [say(d, ROBOT_RETRO, "neutral")];
+    if (d.id === "sb") return [say(d, "The dot-com bubble is looking great. Nothing could possibly go wrong.", "happy")];
+    if (d.id === "ps") return [say(d, "I've got a new game on my phone. It's a snake. It eats dots. I'm REALLY working.", "smirk")];
+    return [say(d, RETRO_LINES[Math.floor(Math.random() * RETRO_LINES.length)], "neutral")];
   }
   if (d.id === "sb") return sbLines();
   if (!state.met.includes(d.id)) {
@@ -1716,6 +1747,7 @@ function endDay() {
   if (state.whips >= 8) titles.push("Professionally Motivated");
   if (metCount() >= TOTAL) titles.push("Team Player");
   if (cat.pets >= 5) titles.push("Cat Person");
+  if (state.timeTraveled) titles.push("Y2K Survivor");
   if (!titles.length) titles.push("Survived Day One");
   const rows = [
     ["Team members met", `${metCount()}/${TOTAL}`],
@@ -1937,6 +1969,127 @@ function updateNpc(n, dt) {
     }
   }
   stepAnim(n, dt);
+}
+
+/* ---------- Time machine coffee: a trip to 1999 ---------- */
+const C_MODERN = { carpetA: C.carpetA, carpetB: C.carpetB, carpetS: C.carpetS, wallFace: C.wallFace, wallStripe: C.wallStripe, chair: C.chair, chairBack: C.chairBack, meet: C.meet, meetS: C.meetS };
+const C_RETRO = { carpetA: "#8c7c66", carpetB: "#86765f", carpetS: "#a4927a", wallFace: "#d9cfb8", wallStripe: "#cfc4aa", chair: "#6b5a4a", chairBack: "#58493b", meet: "#6a5a7a", meetS: "#7a6a8a" };
+const NEON = ["#2fb8c9", "#e2408f", "#f5d142", "#7b4fd1", "#3cc46b", "#f2763a"];
+const FLOPPY_TILE = [19, 16];
+const retroCache = new Map();
+function retroize(look) {
+  if (!look || look.cat) return look;
+  let r = retroCache.get(look);
+  if (!r) {
+    const i = [...look.shirt].reduce((a, ch) => a + ch.charCodeAt(0), 0) % NEON.length;
+    r = { ...look, shirt: NEON[i], pants: "#4a6fa8", hoodie: false, retro: true };
+    retroCache.set(look, r);
+  }
+  return r;
+}
+const RETRO_LINES = [
+  "Did you back up everything for Y2K? I printed the whole codebase. Just in case.",
+  "I burned you a CD with the latest build. Don't scratch it.",
+  "Hold on, I'm downloading a 3 MB file. See you after lunch.",
+  "Is your website optimised for 800 by 600? It has to be.",
+  "The internet is down. Someone picked up the phone.",
+  "My pager went off again. It's my mum, asking if I've eaten.",
+  "Version control? We email zip files to each other. Works great.",
+];
+const ROBOT_RETRO = "Sorry, you're br-br-breaking up... my modem is doing the screaming thing again.";
+let hDayModern = "";
+const fade = { on: false, t: 0, mid: null, done: null, midDone: false };
+function fadeThrough(title, sub, mid, done) {
+  document.getElementById("fadeDay").textContent = title;
+  document.getElementById("fadeSub").textContent = sub;
+  fadeEl.hidden = false; fadeEl.style.opacity = 0;
+  Object.assign(fade, { on: true, t: 0, mid, done, midDone: false });
+  keys.clear(); player.moving = false;
+}
+function updateFade(dt) {
+  if (!fade.on) return;
+  fade.t += dt;
+  const t = fade.t;
+  fadeEl.style.opacity = t < 0.8 ? t / 0.8 : t < 2.2 ? 1 : Math.max(0, 1 - (t - 2.2) / 1.2);
+  if (t >= 0.8 && !fade.midDone) { fade.midDone = true; if (fade.mid) fade.mid(); }
+  if (t >= 3.4) { fade.on = false; fadeEl.hidden = true; if (fade.done) fade.done(); }
+}
+function setRetro(on) {
+  state.retro = on;
+  Object.assign(C, on ? C_RETRO : C_MODERN);
+  const hd = document.getElementById("hDay");
+  if (on) { hDayModern = hd.textContent; hd.textContent = "Dec 31 '99"; }
+  else if (hDayModern) hd.textContent = hDayModern;
+}
+function findOldCoffee() {
+  if (!state.introDone || state.vamp || whip.phase || player.seated || state.standup) return openDialog([{ t: INFO.k[0] }]);
+  openDialog([{ t: "At the back of the cupboard, behind the crumbs, there's a dusty coffee bag. The label says: BEST BEFORE 1999.", choices: [
+    { label: "Brew it", fn: brewOldCoffee },
+    { label: "Put it back", fn: () => openDialog([{ t: "You put it back. Some things are best left in the past." }]) },
+  ] }]);
+}
+function brewOldCoffee() {
+  state.oldCoffeeFound = true;
+  floater("*gurgle*", 26 * T + 8, 2 * T - 6, "#f2c46d");
+  fx.shake = 0.6;
+  burst(24, 26 * T + 8, 2 * T, { speed: [20, 70], life: [0.5, 1], size: [1, 2], colors: ["#b48ee0", "#7fd1e8", "#ffffff"], fade: true });
+  after(0.4, () => openDialog([
+    { t: "The coffee machine makes a noise like a dial-up modem. The coffee tastes like dust and Windows startup sounds." },
+    { t: "The room starts to spin..." },
+  ], () => fadeThrough("1999", "Somewhere in the last century...", () => {
+    setRetro(true);
+    state.floppy = "floor";
+  }, () => {
+    openDialog([
+      { t: "Beige computers. Chunky monitors. Neon windbreakers. Somebody is listening to a portable CD player." },
+      { t: "It's the last day of 1999, and you need a way back. Maybe someone left something useful in the lounge." },
+    ], () => showHint("Find a way back to 2026. Try looking around the lounge."));
+  })));
+}
+function pickUpFloppy() {
+  state.floppy = "held";
+  floater("Got it!", player.x, player.y - 32, "#9fd8ff");
+  openDialog([
+    { t: "You pick up a floppy disk labelled RESTORE. Somewhere, a modem screams in approval." },
+    { t: "The coffee machine has a floppy slot now. Of course it does." },
+  ], () => showHint("Take the RESTORE floppy to the coffee machine."));
+}
+function retroCoffeeMachine() {
+  if (state.floppy !== "held") return openDialog([{ t: "The coffee machine only makes instant coffee now. There's a floppy slot on the front. It looks hungry." }]);
+  openDialog([{ t: "The coffee machine's floppy slot blinks at you. Insert the RESTORE disk?", choices: [
+    { label: "Insert it and go back to 2026", fn: returnTo2026 },
+    { label: "Stay in 1999 forever", fn: stayIn1999 },
+  ] }]);
+}
+function returnTo2026() {
+  state.floppy = null;
+  floater("*whirr click click*", 26 * T + 8, 2 * T - 6, "#9fd8ff");
+  fx.shake = 0.4;
+  after(0.5, () => fadeThrough("2026", "Back to the future. Well, the present.", () => {
+    setRetro(false);
+    state.timeTraveled = true;
+  }, () => openDialog([
+    { t: "Flat screens. Laptops. Robots with faces. You're back." },
+    { t: "Nobody seems to have noticed you were gone. Typical." },
+  ])));
+}
+function stayIn1999() {
+  state.ended = true;
+  fadeThrough("1999", "Forever.", null, () => {
+    const titles = ["Stuck in 1999"];
+    if (state.golden) titles.push("Golden God of Productivity");
+    if (state.serverDead) titles.push("Destroyer of Production");
+    if (state.yogurtEaten) titles.push("Iron Stomach (Almost)");
+    if (cat.pets >= 5) titles.push("Cat Person");
+    showEnd("Secret ending", titles, [
+      ["Year", "1999, permanently"],
+      ["Team members met", `${metCount()}/${TOTAL}`],
+      ["Coffees (including one very old one)", state.coffees + 1],
+      ["Internet speed", "56k"],
+      ["Y2K preparation", "Printed the codebase"],
+      ["Times MAUI was petted", cat.pets],
+    ], "Start over");
+  });
 }
 
 /* ---------- Children of the Night (secret ending) ---------- */
@@ -2478,6 +2631,9 @@ function interact() {
       { label: "Put it back", fn: () => openDialog([{ t: "You put it back. Wise. Very wise." }]) },
     ] }]);
   }
+  if (ch === "m" && state.retro) return retroCoffeeMachine();
+  if (ch === "k" && state.retro && Math.floor(fx / T) === 27) return openDialog([{ t: "A fax machine. It's receiving a 40-page fax from the other teams. Every page starts with 'Quick question'." }]);
+  if (ch === "k" && !state.retro && !state.oldCoffeeFound) return findOldCoffee();
   if (ch === "m") return brewCoffee();
   if (ch === "R") return lookInMirror();
   if (ch === "b") return sprintBoard();
@@ -2560,6 +2716,11 @@ function render(time) {
     if (isWall(ch)) drawWall(c, r, px, py, ch);
     else {
       drawFloor(c, r, px, py, ch);
+      if (state.retro && state.floppy === "floor" && c === FLOPPY_TILE[0] && r === FLOPPY_TILE[1]) {
+        F(px + 4, py + 6, 8, 8, C.out); F(px + 5, py + 7, 6, 6, "#2f5fbf");
+        F(px + 6, py + 7, 4, 2, "#c9d0d6"); F(px + 6, py + 10, 4, 3, "#f7f3ea");
+        if (Math.floor(time * 3) % 3 === 0) F(px + 12, py + 4, 1, 1, "#ffffff");
+      }
       if (OBJ.includes(ch)) {
         if (ch === "s") {
           if (at(c - 1, r) !== "s" && at(c, r - 1) !== "s") list.push({ k: (r + 2) * T, f: () => drawObject(ch, c, r, px, py, time) });
@@ -2617,6 +2778,9 @@ function loop(t) {
   updatePov(dt);
   updateOutsiders(dt);
   updateCat(dt);
+  updateFade(dt);
+  if (state.retro && state.floppy === "floor" && !dlg.open && !busy()
+      && Math.floor(player.x / T) === FLOPPY_TILE[0] && Math.floor((player.y - 2) / T) === FLOPPY_TILE[1]) pickUpFloppy();
   updateFloaters(dt);
   if (SB.shout > 0) SB.shout = Math.max(0, SB.shout - dt);
   updatePlayer(dt);

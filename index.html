@@ -157,7 +157,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 
   <div id="end" hidden>
     <div class="end-card">
-      <p class="end-kicker">End of Day 1</p>
+      <p class="end-kicker" id="endKicker">End of Day 1</p>
       <h1 class="end-title" id="endTitle">Survived Day One</h1>
       <div class="end-badges" id="endBadges"></div>
       <dl class="end-stats frame" id="endStats"></dl>
@@ -176,7 +176,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 19;
+const VERSION = 20;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -420,7 +420,7 @@ SB.crack = 0; SB.shout = 0;
 /* ---------- Effects: timers, particles, flash, screen shake ---------- */
 const timers = [];
 const after = (sec, fn) => timers.push({ t: sec, fn });
-const busy = () => timers.length > 0 || !!player.autoPath || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
+const busy = () => timers.length > 0 || !!player.autoPath || state.vamp === "approach" || state.vamp === "talk" || state.vamp === "escape" || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
   || whip.phase === "coming" || whip.phase === "escort" || whip.phase === "rush";
 const whip = { phase: null, stuck: 0, next: 0 };
 const floaters = [];
@@ -491,13 +491,16 @@ function drawPuddle(d) {
   F(x - 3, y - 2, 2, 1, "#e6e09a"); F(x + 2, y + 1, 2, 2, "#d6d66a"); F(x - 6, y + 1, 2, 1, "#d6d66a");
 }
 
+const DRAC_LOOK = { skin: "#dfe3ec", hair: "#141018", style: "vamp", beard: "none", shirt: "#1a1420", pants: "#1a1420", collar: "#9b1b30", cape: true, eyes: "#d6453a", fangs: true };
 const GOLD_LOOK = { ...PLAYER_LOOK, hair: "#ffe46b", style: "spiky", eyes: "#1f9aa6" };
 function playerLook() {
   // during the transformation the hair flickers between dark and blonde
   const flicker = fx.ascend > 1.1 && Math.floor(fx.ascend * (6 + fx.ascend * 4)) % 2 === 0;
   const base = state.golden || flicker ? GOLD_LOOK : PLAYER_LOOK;
-  return { ...base, skin: state.sick > 0 ? "#b9d38f" : base.skin, sick: state.sick > 0,
+  const look = { ...base, skin: state.sick > 0 ? "#b9d38f" : base.skin, sick: state.sick > 0,
     soot: state.serverDead, pukeStain: state.yogurtEaten, aura: state.golden };
+  if (state.masked) Object.assign(look, { skin: "#d8dde6", hair: "#121014", style: "vamp", eyes: "#d6453a", fangs: true });
+  return look;
 }
 
 /* ---------- Opening cutscene ----------
@@ -521,7 +524,10 @@ function updateCutscene(dt) {
     if (!SB.target) { SB.dir = "down"; player.dir = "up"; setPhase("talk"); startIntro(); }
   }
 }
-function camFocus() { return cut.phase === "notice" || cut.phase === "approach" ? SB : player; }
+function camFocus() {
+  if (state.vamp === "escape" && typeof SD !== "undefined" && !SD.gone) return SD;
+  return cut.phase === "notice" || cut.phase === "approach" ? SB : player;
+}
 const chars = [player, ...npcs];
 let talkingTo = null;
 
@@ -596,7 +602,14 @@ function drawWall(c, r, px, py, ch) {
   F(px, py + 13, T, 3, C.base);
   F(px, py + 13, T, 1, "#a07c57");
 
-  if (ch === "w") {
+  if (ch === "w" && state.windowBroken && c === 13 && r === 1) {
+    F(px + 1, py + 2, 14, 11, "#f2e6cf");
+    F(px + 2, py + 3, 12, 9, "#1b2638");
+    F(px + 2, py + 3, 3, 4, "#8fbcd6"); F(px + 11, py + 3, 3, 3, "#8fbcd6"); F(px + 2, py + 9, 2, 3, "#8fbcd6"); F(px + 12, py + 10, 2, 2, "#8fbcd6");
+    F(px + 5, py + 3, 1, 2, "#cfe3ea"); F(px + 10, py + 4, 1, 1, "#cfe3ea"); F(px + 4, py + 10, 1, 1, "#cfe3ea");
+    F(px + 8, py + 5, 1, 1, "#f7f3ea"); F(px + 6, py + 8, 1, 1, "#f7f3ea");
+    F(px + 1, py + 12, 14, 1, "#c9b48f");
+  } else if (ch === "w") {
     F(px + 1, py + 2, 14, 11, "#f2e6cf");
     F(px + 2, py + 3, 12, 9, "#8fbcd6");
     F(px + 2, py + 3, 12, 3, "#a9d0e4");
@@ -814,7 +827,15 @@ function drawObject(ch, c, r, px, py, time) {
     case "f": return drawFridge(px, py);
     case "x": return drawTable(c, r, px, py, "x", "#a8703f", "#7a4d2a", null);
     case "y": return drawTable(c, r, px, py, "y", "#c99a62", "#8f6a3e", null);
-    case "T": return drawTable(c, r, px, py, "T", "#2f7d5a", "#1f4f3a", "#e8f0ea");
+    case "T":
+      drawTable(c, r, px, py, "T", "#2f7d5a", "#1f4f3a", "#e8f0ea");
+      if (c === 20 && r === 13 && !state.masked) {
+        F(px + 3, py + 3, 10, 9, C.out); F(px + 4, py + 4, 8, 7, "#dfe3ec");
+        F(px + 4, py + 4, 8, 2, "#141018"); F(px + 7, py + 6, 2, 1, "#141018");
+        F(px + 5, py + 7, 2, 1, "#d6453a"); F(px + 9, py + 7, 2, 1, "#d6453a");
+        F(px + 6, py + 9, 1, 2, "#ffffff"); F(px + 9, py + 9, 1, 2, "#ffffff");
+      }
+      return;
     case "o": return drawSofa(c, r, px, py);
   }
 }
@@ -833,6 +854,11 @@ function drawPerson(e) {
   const s = Spr();
   const hy = y - 24 + b;
 
+  // a cape sits behind the body
+  if (L.cape && dir !== "up") {
+    if (side) s.r(left ? x : x - 7, y - 15 + b, 7, 14, "#1a1420");
+    else { s.r(x - 8, y - 15 + b, 16, 14, "#1a1420"); s.r(x - 8, y - 18 + b, 3, 5, "#9b1b30"); s.r(x + 5, y - 18 + b, 3, 5, "#9b1b30"); }
+  }
   // long hair sits behind the body
   if (L.style === "long") {
     if (dir === "down") s.r(x - 6, hy + 3, 12, 11, L.hair);
@@ -853,6 +879,7 @@ function drawPerson(e) {
     s.r(x - 7, y - 13 + b + la, 2, 5, L.shirt); s.r(x - 7, y - 8 + b + la, 2, 2, L.skin);
     s.r(x + 5, y - 13 + b + ra, 2, 5, L.shirt); s.r(x + 5, y - 8 + b + ra, 2, 2, L.skin);
   }
+  if (L.cape && dir === "up") { s.r(x - 7, y - 16 + b, 14, 15, "#1a1420"); s.d(x - 6, y - 16 + b, 12, 1, "#9b1b30"); }
   s.r(x - 5, y - 23 + b, 10, 9, L.skin);
 
   const H = L.hair;
@@ -880,6 +907,14 @@ function drawPerson(e) {
         s.r(x - 6, hy, 12, 4, H);
         if (dir === "down") { s.r(x - 6, hy + 4, 2, 9, H); s.r(x + 4, hy + 4, 2, 9, H); }
         else s.r(left ? x + 1 : x - 6, hy + 3, 5, 10, H);
+      }
+      break;
+    case "vamp":
+      if (dir === "up") s.r(x - 6, hy, 12, 9, H);
+      else {
+        s.r(x - 6, hy, 12, 3, H);
+        if (dir === "down") { s.r(x - 6, hy + 3, 1, 4, H); s.r(x + 5, hy + 3, 1, 4, H); s.d(x - 1, hy + 3, 2, 2, H); }
+        else s.r(left ? x + 2 : x - 6, hy + 2, 4, 5, H);
       }
       break;
     case "spiky": {
@@ -929,6 +964,7 @@ function drawPerson(e) {
     if (L.beard === "stache") s.d(x - 2, y - 16 + b, 4, 1, H);
     else if (e.scream) { s.d(x - 2, y - 17 + b, 4, 3, "#5a2420"); s.d(x - 1, y - 17 + b, 2, 1, "#f7f3ea"); }
     else if (L.beard === "none" || !L.beard) s.d(x - 1, y - 16 + b, 2, 1, shade(L.skin, 0.82));
+    if (L.fangs) { s.d(x - 2, y - 16 + b, 1, 1, "#ffffff"); s.d(x + 1, y - 16 + b, 1, 1, "#ffffff"); }
   } else if (side) {
     if (L.beard === "full") s.d(left ? x - 5 : x - 1, y - 17 + b, 6, 3, H);
     if (L.beard === "stubble") s.d(left ? x - 5 : x, y - 16 + b, 5, 2, shade(L.skin, 0.85));
@@ -992,7 +1028,7 @@ function drawRobot(e) {
   const scan = Math.floor(performance.now() / 120) % 10;
   F(sx, sy + scan, 12, 1, "rgba(255,255,255,.12)");
 }
-const onPhone = n => n.def.id === "ps" && !state.met.includes("ps") && !n.caught && !n.hop;
+const onPhone = n => n.def.id === "ps" && !n.gone && !state.vamp && !state.met.includes("ps") && !n.caught && !n.hop;
 function drawPhoneInHands(e) {
   const x = Math.round(e.x), y = Math.round(e.y - (e.lift || 0));
   const glow = ["#7fd1e8", "#f6d65b", "#b48ee0", "#7ccf6a"][Math.floor(performance.now() / 300) % 4];
@@ -1110,6 +1146,7 @@ function drawPortrait(L, mood) {
   const fr = "#3a2a2a", lens = "#dce9ef", lip = "#7a3a32";
   const s = Spr();
   if (L.style === "long") s.r(9, 9, 30, 33, H);
+  if (L.cape) { s.r(3, 26, 9, 22, "#9b1b30"); s.r(36, 26, 9, 22, "#9b1b30"); }
   s.r(5, 41, 38, 7, L.shirt); s.r(9, 37, 30, 5, L.shirt);
   s.r(19, 31, 10, 7, skin);
   s.r(12, 10, 24, 20, skin); s.r(14, 30, 20, 3, skin); s.r(17, 33, 14, 2, skin);
@@ -1119,6 +1156,7 @@ function drawPortrait(L, mood) {
     case "buzz": s.r(12, 6, 24, 6, H); s.r(11, 10, 2, 7, H); s.r(35, 10, 2, 7, H); break;
     case "curly": s.r(9, 3, 30, 10, H); s.r(7, 7, 5, 12, H); s.r(36, 7, 5, 12, H); s.r(12, 1, 8, 3, H); s.r(22, 0, 8, 4, H); s.r(31, 2, 6, 3, H); break;
     case "bald": s.r(9, 15, 4, 8, H); s.r(35, 15, 4, 8, H); break;
+    case "vamp": s.r(11, 5, 26, 6, H); s.r(9, 8, 4, 9, H); s.r(35, 8, 4, 9, H); s.r(15, 3, 18, 3, H); break;
     case "spiky":
       s.r(11, 5, 26, 8, H);
       s.r(7, 4, 5, 11, H); s.r(12, 1, 5, 9, H); s.r(18, 0, 5, 8, H); s.r(24, 0, 5, 8, H); s.r(30, 1, 5, 9, H); s.r(36, 4, 5, 11, H);
@@ -1147,6 +1185,10 @@ function drawPortrait(L, mood) {
       P(11, 11, 26, 3, H); P(16, 13, 4, 1, H2); P(29, 13, 4, 1, H2);
       break;
     case "bald": P(18, 12, 6, 1, shade(skin, 1.12)); P(20, 13, 3, 1, shade(skin, 1.12)); break;
+    case "vamp":
+      P(12, 11, 8, 2, H); P(28, 11, 8, 2, H); P(20, 11, 8, 3, H); P(22, 14, 4, 2, H); P(23, 16, 2, 1, H);
+      P(16, 6, 6, 1, shade(H, 2.2)); P(27, 6, 5, 1, shade(H, 2.2));
+      break;
     case "spiky":
       P(13, 11, 5, 5, H); P(19, 11, 3, 3, H); P(24, 11, 3, 4, H); P(29, 11, 6, 5, H);
       for (const [x, y] of [[9, 6], [14, 3], [20, 2], [26, 2], [32, 3], [38, 6]]) P(x, y, 2, 3, "#fff6c2");
@@ -1195,6 +1237,8 @@ function drawPortrait(L, mood) {
   else if (mood === "smirk") { P(22, 31, 5, 1, lip); P(27, 30, 1, 1, lip); }
   else if (mood === "queasy") { P(21, 31, 6, 1, lip); P(22, 32, 2, 1, lip); P(26, 30, 1, 1, lip); }
   else P(21, 31, 6, 1, lip);
+  if (L.fangs) { P(21, 32, 1, 2, "#ffffff"); P(26, 32, 1, 2, "#ffffff"); }
+  if (L.cape) { P(18, 37, 12, 4, "#1a1420"); P(22, 37, 4, 3, "#f0ece2"); }
   if (L.soot) {
     const ash = "rgba(45,35,35,.65)";
     P(13, 24, 4, 2, ash); P(31, 16, 4, 2, ash); P(26, 27, 3, 2, ash); P(16, 13, 3, 1, ash); P(33, 25, 2, 2, ash);
@@ -1399,6 +1443,7 @@ function jumpOffTable(done) {
   jumpTo(x, y, () => { player.onTable = false; if (done) done(); });
 }
 function sbShoutsAboutAscending() {
+  if (SB.gone || state.vamp) return;
   // S. B. felt the power level from across the office
   SB.sawGold = true;
   SB.shout = 2; fx.shake = 0.5;
@@ -1476,6 +1521,7 @@ function lookInMirror() {
   const L = playerLook();
   const me = { name: "You", role: "New hire, reflected", look: L };
   const lines = [];
+  if (state.masked) lines.push({ who: me, mood: "smirk", t: "A vampire stares back at you. It's only a rubber mask, but the fangs feel... a little too real." });
   if (state.golden) lines.push({ who: me, mood: "happy", t: "A golden god stares back at you. The hair has not stopped floating. You're not sure it ever will." });
   if (L.sick) lines.push({ who: me, mood: "queasy", t: "You look... green. Very green. The yogurt is still negotiating with your stomach." });
   else if (state.yogurtEaten) lines.push({ who: me, mood: "neutral", t: "There's still yogurt on your shirt. Nobody has said anything. Everybody has noticed." });
@@ -1508,6 +1554,8 @@ function checkLeave() {
   if (cut.phase !== "done" || dlg.open || busy() || whip.phase) return;
   const c = Math.floor(player.x / T), r = Math.floor((player.y - 2) / T);
   if (at(c, r) !== "M" || player.dir !== "down") return;
+  if (state.vamp === "gone") return endVampire();
+  if (state.vamp) return;
   if (state.minutes >= 17 * 60) return endDay();
   if (state.questDone) return startWhip();
   const i = state.leaveTries++ % LEAVE_LINES.length;
@@ -1531,6 +1579,7 @@ function stand() {
   player.dir = "down";
 }
 function tryStand() {
+  if (state.vamp) { stand(); return; }
   if (whip.phase === "guard") { if (SB.crack <= 0) crack("SIT."); keys.clear(); return; }
   if (whip.phase) { keys.clear(); return; }
   if (state.questDone && state.minutes < 17 * 60) {
@@ -1605,6 +1654,7 @@ function updateWhip(dt) {
 }
 function fiveOClock() {
   state.fiveDone = true;
+  if (state.vamp) return;
   if (whip.phase) {
     whip.phase = null; SB.crack = 0;
     openDialog([
@@ -1629,8 +1679,6 @@ function endDay() {
   if (metCount() >= TOTAL) titles.push("Team Player");
   if (cat.pets >= 5) titles.push("Cat Person");
   if (!titles.length) titles.push("Survived Day One");
-  document.getElementById("endTitle").textContent = titles[0];
-  document.getElementById("endBadges").innerHTML = titles.slice(1).map(t => `<span>${t}</span>`).join("");
   const rows = [
     ["Team members met", `${metCount()}/${TOTAL}`],
     ["Coffees", state.coffees],
@@ -1640,7 +1688,14 @@ function endDay() {
     ["Whip cracks taken", state.whips],
     ["Times MAUI was petted", cat.pets],
   ];
+  showEnd("End of Day 1", titles, rows, "Play again");
+}
+function showEnd(kicker, titles, rows, button) {
+  document.getElementById("endKicker").textContent = kicker;
+  document.getElementById("endTitle").textContent = titles[0];
+  document.getElementById("endBadges").innerHTML = titles.slice(1).map(t => `<span>${t}</span>`).join("");
   document.getElementById("endStats").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  document.getElementById("again").textContent = button;
   const end = document.getElementById("end");
   end.hidden = false;
   requestAnimationFrame(() => requestAnimationFrame(() => end.classList.add("show")));
@@ -1701,7 +1756,7 @@ function blockedAt(x, y, self, ghost) {
   const pts = [[x - 5, y - 5], [x + 4, y - 5], [x - 5, y - 1], [x + 4, y - 1]];
   for (const [px, py] of pts) if (solid(at(Math.floor(px / T), Math.floor(py / T)))) return true;
   for (const o of chars) {
-    if (o === self || (ghost && o !== player)) continue;
+    if (o === self || o.gone || (ghost && o !== player)) continue;
     if (Math.abs(o.x - x) < 10 && Math.abs(o.y - y) < 6) return true;
   }
   return false;
@@ -1789,6 +1844,14 @@ function updatePlayer(dt) {
   checkLeave();
 }
 function updateNpc(n, dt) {
+  if (n.gone) return;
+  if (state.vamp) {
+    if (n === SD) { updateVamp(n, dt); return; }
+    // everyone else freezes in terror and stares at the Count
+    n.moving = false; n.path = null; n.target = null;
+    if (!SD.gone) n.dir = facingTo(n, SD);
+    stepAnim(n, dt); return;
+  }
   if (n === SB && cut.phase !== "done" && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
   if (n === SB && whip.phase && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
   if (n.path && talkingTo !== n) { followPath(n, dt); return; }
@@ -1833,6 +1896,140 @@ function updateNpc(n, dt) {
     }
   }
   stepAnim(n, dt);
+}
+
+/* ---------- Children of the Night (secret ending) ---------- */
+const SD = npcs.find(n => n.def.id === "sd");
+const COUNT = { name: "Count S. D.", role: "Children of the Night", look: DRAC_LOOK };
+const VAMP_TAUNTS = ["Bleh!", "Ah-ha-ha!", "I vant your stand-up notes!", "Ze night is young!", "Bleh! Bleh!"];
+function pickUpMask() {
+  if (!state.introDone || whip.phase || player.seated || state.standup || state.vamp) return openDialog([{ t: INFO.T[0] }]);
+  openDialog([{ t: "There's a rubber vampire mask lying on the ping pong table. Somebody's leftover from Halloween.", choices: [
+    { label: "Put it on", fn: wearMask },
+    { label: "Leave it", fn: () => {} },
+  ] }]);
+}
+function wearMask() {
+  state.masked = true; keys.clear();
+  burst(18, player.x, player.y - 16, { speed: [10, 30], life: [0.5, 1], size: [2, 3], colors: ["#6b6670", "#857f8a"], fade: true });
+  floater("Bleh!", player.x, player.y - 34, "#ffd0d0");
+  state.vamp = "approach";
+  after(0.9, () => {
+    SD.speed = 60;
+    floater("!", SD.x, SD.y - 32, "#ffd66b");
+    sendNpc(SD, Math.floor(player.x / T), Math.floor((player.y - 2) / T));
+  });
+}
+function vampTalk() {
+  openDialog([
+    say(SD.def, "Ohhh... vhat is zis?", "shock"),
+    say(SD.def, "I did not know you vere also von of ze children of ze night!", "happy"),
+    { t: "S. D.'s eyes start to glow red. The lights flicker." },
+  ], transformSD);
+}
+function transformSD() {
+  fx.flash = 1; fx.flashRGB = "120,20,40"; fx.shake = 0.7;
+  burst(40, SD.x, SD.y - 14, { speed: [30, 90], life: [0.6, 1.3], size: [2, 2], colors: ["#2a2030", "#4a3a5a", "#1a1420"], fade: true });
+  SD.look = DRAC_LOOK;
+  floater("Ah-ha-ha-ha!", SD.x, SD.y - 36, "#ff9aa8");
+  after(1.2, () => openDialog([
+    say(COUNT, "At last! Ze night is young, and ze stand-up is long.", "smirk"),
+    say(COUNT, "Now... who is hungry? I mean, who is NOT hungry? Ah-ha-ha!", "angry"),
+    { t: "Count S. D. sweeps his cape around himself and glides off to hunt the team." },
+  ], () => {
+    state.vamp = "hunt"; SD.speed = 85; SD.biteWait = 0.3;
+    showHint("Count S. D. is hunting the team! You're safe. You're one of the children of the night.");
+  }));
+}
+function vampBite(prey) {
+  prey.gone = true;
+  if (prey.look.robot) {
+    state.robotsOff = (state.robotsOff || 0) + 1;
+    burst(14, prey.x, prey.y - 20, { speed: [20, 60], gravity: 90, life: [0.3, 0.7], size: [1, 2], colors: ["#f2c46d", "#7fd1e8", "#ffffff"] });
+    floater("CALL ENDED", prey.x, prey.y - 34, "#9fd8ff");
+  } else {
+    state.bitten = (state.bitten || 0) + 1;
+    burst(22, prey.x, prey.y - 14, { angle: -Math.PI / 2, spread: 1.6, speed: [25, 70], life: [0.7, 1.3], size: [2, 2], colors: ["#2a2030", "#4a3a5a", "#1a1420"], fade: true });
+    floater("*poof* bats!", prey.x, prey.y - 30, "#d9c8ff");
+  }
+  floater(VAMP_TAUNTS[Math.floor(Math.random() * VAMP_TAUNTS.length)], SD.x, SD.y - 36, "#ff9aa8");
+  fx.shake = Math.max(fx.shake, 0.25);
+  SD.biteWait = 0.7;
+}
+function updateVamp(n, dt) {
+  if (state.vamp === "approach") {
+    if (n.path) followPath(n, dt); else stepAnim(n, dt);
+    if (Math.hypot(n.x - player.x, n.y - player.y) < 22 || (!n.path && n.forced === false && n.moving === false && Math.hypot(n.x - player.x, n.y - player.y) < 40)) {
+      n.path = null; n.forced = false; n.moving = false;
+      n.dir = facingTo(n, player); player.dir = facingTo(player, n);
+      state.vamp = "talk";
+      talkingTo = n;
+      vampTalk();
+    }
+    return;
+  }
+  if (state.vamp === "hunt") {
+    if (n.biteWait > 0) { n.biteWait -= dt; n.moving = false; stepAnim(n, dt); return; }
+    const prey = n.prey && !n.prey.gone ? n.prey : null;
+    if (prey && Math.hypot(prey.x - n.x, prey.y - n.y) < 14) { n.path = null; n.prey = null; vampBite(prey); return; }
+    if (n.path) { followPath(n, dt); return; }
+    if (prey) { vampBite(prey); n.prey = null; return; }
+    const alive = npcs.filter(o => o !== n && !o.gone);
+    if (!alive.length) {
+      state.vamp = "escape";
+      floater("Ze buffet is closed!", n.x, n.y - 36, "#ff9aa8");
+      sendNpc(n, 13, 2, () => { n.wj = { t: 0, sy: n.y }; n.dir = "up"; });
+      return;
+    }
+    alive.sort((a, b) => Math.hypot(a.x - n.x, a.y - n.y) - Math.hypot(b.x - n.x, b.y - n.y));
+    n.prey = alive[0];
+    floater("AAH!", n.prey.x, n.prey.y - 32, "#ffffff");
+    sendNpc(n, Math.floor(n.prey.x / T), Math.floor((n.prey.y - 2) / T));
+    return;
+  }
+  if (state.vamp === "escape") {
+    if (n.wj) {
+      n.wj.t += dt;
+      const k = Math.min(1, n.wj.t / 0.5);
+      n.y = n.wj.sy + (1 * T + 12 - n.wj.sy) * k;
+      n.lift = Math.sin(k * Math.PI) * 10;
+      if (k >= 1) {
+        n.wj = null; n.lift = 0; n.gone = true;
+        state.windowBroken = true; state.vamp = "gone";
+        fx.shake = 0.6; fx.flash = 0.5; fx.flashRGB = "200,220,255";
+        burst(30, 13 * T + 8, 1 * T + 8, { speed: [30, 100], gravity: 120, life: [0.5, 1], size: [1, 2], colors: ["#cfe3ea", "#ffffff", "#8fbcd6"] });
+        burst(40, 13 * T + 8, 1 * T + 4, { angle: -Math.PI / 2, spread: 1.2, speed: [40, 110], life: [0.8, 1.6], size: [2, 2], colors: ["#2a2030", "#4a3a5a", "#1a1420"], fade: true });
+        floater("Ah-ha-ha-haaa!", 13 * T + 8, 1 * T, "#ff9aa8");
+        after(1.2, () => openDialog([
+          { t: "Count S. D. bursts through the window next to the clock and flutters off into the night as a cloud of bats." },
+          { t: "The office is silent. Somewhere, a pager starts beeping. Nobody answers it." },
+          { t: "There's nothing left for you here. Maybe it's time to leave the building." },
+        ], () => showHint("Leave the building through the door to start over.")));
+      }
+      stepAnim(n, dt);
+      return;
+    }
+    if (n.path) { followPath(n, dt); return; }
+    stepAnim(n, dt);
+    return;
+  }
+  n.moving = false; stepAnim(n, dt);
+}
+function endVampire() {
+  state.ended = true; keys.clear(); player.moving = false;
+  const titles = ["Children of the Night"];
+  if (state.golden) titles.push("Golden God of Productivity");
+  if (state.serverDead) titles.push("Destroyer of Production");
+  if (state.yogurtEaten) titles.push("Iron Stomach (Almost)");
+  if (cat.pets >= 5) titles.push("Cat Person");
+  showEnd("Secret ending", titles, [
+    ["Colleagues turned into bats", state.bitten || 0],
+    ["Robots disconnected", state.robotsOff || 0],
+    ["Windows broken", 1],
+    ["Team members met", `${metCount()}/${TOTAL}`],
+    ["Times MAUI was petted", cat.pets],
+    ["MAUI", "Hid under the sofa. Unharmed."],
+  ], "Start over");
 }
 
 /* ---------- MAUI, the team mascot (a Ragdoll cat) ---------- */
@@ -1990,8 +2187,8 @@ const GLASS_QUIPS = [
 ];
 function glassTalk() {
   let best = null, bd = Infinity;
-  for (const n of npcs) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = n; } }
-  if (!best) return;
+  for (const n of npcs) { if (n.gone || (state.vamp && n === SD)) continue; const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = n; } }
+  if (!best) return openDialog([{ t: "The other teams are still walking around out there. In here, there's nobody left to say anything mean about them." }]);
   const d = best.def;
   best.dir = facingTo(best, player);
   const who = bd > 60 ? { ...d, role: "Calling over from across the room" } : d;
@@ -2125,7 +2322,7 @@ function followPath(n, dt) {
       if (cb) cb();
     }
   } else {
-    const sp = 50 * dt;
+    const sp = (n.speed || 50) * dt;
     let nx = n.x, ny = n.y;
     if (Math.abs(dx) >= 1) { nx += Math.sign(dx) * Math.min(sp, Math.abs(dx)); n.dir = dx < 0 ? "left" : "right"; }
     else { ny += Math.sign(dy) * Math.min(sp, Math.abs(dy)); n.dir = dy < 0 ? "up" : "down"; }
@@ -2179,7 +2376,7 @@ function endStandup() {
   for (const n of npcs) sendNpc(n, n.home[0], n.home[1]);
 }
 function sprintBoard() {
-  if (!state.introDone || whip.phase || player.seated) return openDialog([{ t: INFO.b[0] }]);
+  if (!state.introDone || whip.phase || player.seated || state.vamp) return openDialog([{ t: INFO.b[0] }]);
   if (state.standup) {
     return openDialog([{ t: "The stand-up is in full swing. Everyone is lined up along the wall.", choices: [
       { label: "End the stand-up", fn: endStandup },
@@ -2201,8 +2398,14 @@ function interact() {
   if (Math.hypot(fx - cat.x, fy - (cat.y - 4)) < 11) return petCat();
   let best = null, bd = 13;
   for (const n of npcs) {
+    if (n.gone) continue;
     const d = Math.hypot(fx - n.x, fy - (n.y - 3));
     if (d < bd) { bd = d; best = n; }
+  }
+  if (best && state.vamp) {
+    state.serverPokes = 0;
+    if (best === SD) return openDialog([say(COUNT, "Not now, my child. I am... vorking. Ah-ha-ha!", "smirk")]);
+    return openDialog([say(best.def, "Shhh! Don't move! He can't see us if we don't move!", "shock")]);
   }
   if (best && onPhone(best)) { state.serverPokes = 0; return catchPS(best); }
   if (best) {
@@ -2232,6 +2435,7 @@ function interact() {
   if (ch === "R") return lookInMirror();
   if (ch === "b") return sprintBoard();
   if (ch === "G") return glassTalk();
+  if (ch === "T" && !state.masked) return pickUpMask();
   const tc = Math.floor(fx / T), tr = Math.floor(fy / T);
   if (ch === "n" || (ch === "c" && tc === 13 && tr === 11)) { state.serverPokes = 0; return sit(); }
   const pool = INFO[ch];
@@ -2319,7 +2523,7 @@ function render(time) {
   for (const d of decals) drawPuddle(d);
   list.push({ k: cat.y, f: drawCat });
   for (const o of outsiders) list.push({ k: o.y, f: () => drawPerson(o) });
-  for (const e of chars) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.y, f: () => {
+  for (const e of chars) if (!e.gone) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.y, f: () => {
     const lift = Math.round(e.lift || 0);
     if (lift) { F(Math.round(e.x) - 5, Math.round(e.y) - 1, 10, 2, "rgba(20,10,20,.25)"); e.y -= lift; }
     if (e === player && (state.golden || (fx.ascend > 1.1 && Math.floor(time * 14) % 2 === 0))) drawAura(e, time, fx.ascend > 0 ? 1.4 : 1);
@@ -2342,11 +2546,11 @@ function render(time) {
 
   // markers: speech bubble for whoever is in range, yellow "!" over people you haven't met
   let near = null, nd = 30;
-  for (const n of npcs) { const d = Math.hypot(player.x - n.x, player.y - n.y); if (d < nd) { nd = d; near = n; } }
+  for (const n of npcs) { if (n.gone) continue; const d = Math.hypot(player.x - n.x, player.y - n.y); if (d < nd) { nd = d; near = n; } }
   if (cut.phase === "notice") drawNotice(SB.x, SB.y - 30, cut.t);
   if (fx.flash > 0) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(${fx.flashRGB},${fx.flash})`; g.fillRect(0, 0, vw, vh); g.setTransform(1, 0, 0, 1, -camX, -camY); }
   for (const n of npcs) {
-    if (dlg.open || cut.phase !== "done") break;
+    if (dlg.open || cut.phase !== "done" || state.vamp) break;
     const top = n.y - (n.look.robot ? 39 : 30);
     if (n === near) drawBubble(n.x, top);
     else if (!state.met.includes(n.def.id)) drawExclaim(n.x, top);

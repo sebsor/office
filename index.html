@@ -1,0 +1,1283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A Stardew-style pixel game set on an IT development floor.">
+<meta name="theme-color" content="#1d1820">
+<title>Commit Valley</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+[hidden]{display:none!important}
+/* Layout: full-bleed pixel canvas with a camera that follows the player; wood-framed HUD and dialogue float on top */
+:root{
+  --ground:#1d1820;
+  --wood-dark:#5c2e14;
+  --wood:#8a4b22;
+  --wood-light:#d4893f;
+  --parchment:#f8e1ae;
+  --parchment-2:#ebc583;
+  --ink:#3a2316;
+  --muted:#8a5a34;
+  --focus:#4fb37a;
+  --font-ui:"Pixelify Sans","Courier New",monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overflow:hidden}
+#game{position:fixed;inset:0;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;background:var(--ground)}
+#view{position:absolute;left:0;top:0;image-rendering:crisp-edges;image-rendering:pixelated}
+
+.frame{
+  background:linear-gradient(var(--parchment),var(--parchment-2));
+  border:3px solid var(--wood);
+  border-radius:4px;
+  box-shadow:0 0 0 3px var(--wood-light),0 0 0 6px var(--wood-dark),0 8px 0 6px rgba(0,0,0,.35);
+}
+
+#hud{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:calc(16px + env(safe-area-inset-right,0px));
+  padding:6px 12px 8px;min-width:148px;display:grid;gap:3px;font-variant-numeric:tabular-nums}
+.hud-row{display:flex;justify-content:space-between;gap:12px;font-size:15px;font-weight:600}
+.hud-row .muted{color:var(--muted);font-weight:400}
+.hud-time{font-size:24px;font-weight:700;line-height:1.05;text-align:center;border-block:2px solid rgba(138,75,34,.35);padding-block:2px}
+.focus{display:flex;align-items:center;gap:8px;font-size:14px}
+.bar{flex:1;height:9px;background:#5c2e14;border:2px solid var(--wood-dark);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:var(--focus);box-shadow:inset 0 2px 0 rgba(255,255,255,.35);transition:width .3s}
+.quest{color:#2f6239}
+.quest.done{color:#4f8f3a}
+
+#hint{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));left:calc(16px + env(safe-area-inset-left,0px));
+  padding:6px 12px;font-size:15px;max-width:min(330px,calc(100% - 230px));line-height:1.3;transition:opacity .6s}
+#hint b{font-weight:700}
+#hint.gone{opacity:0;pointer-events:none}
+
+#dlg{position:absolute;left:0;right:0;margin-inline:auto;width:min(900px,calc(100% - 40px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
+  bottom:calc(22px + env(safe-area-inset-bottom,0px));display:flex;gap:18px;align-items:stretch;cursor:pointer}
+.touch #dlg{bottom:calc(170px + env(safe-area-inset-bottom,0px))}
+.dlg-text{flex:1;min-width:0;min-height:128px;padding:14px 20px 26px;position:relative}
+.dlg-text p{margin:0;font-size:21px;line-height:1.4;color:var(--ink)}
+.dlg-next{position:absolute;right:14px;bottom:8px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid var(--wood);animation:nudge .7s steps(2) infinite}
+@keyframes nudge{50%{transform:translateY(3px)}}
+.dlg-port{flex:0 0 auto;width:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px}
+#portrait{width:120px;height:120px;image-rendering:pixelated;background:linear-gradient(#e0a868,#c98848);border:3px solid var(--wood);border-radius:2px}
+.nameplate{background:var(--parchment);border:2px solid var(--wood);border-radius:3px;padding:1px 12px;font-weight:700;font-size:17px;text-align:center}
+.role{font-size:13px;color:var(--muted);text-align:center;line-height:1.15}
+
+#fade{position:absolute;inset:0;background:#ffffff;display:grid;place-content:center;text-align:center;gap:6px;pointer-events:none;padding-inline:max(16px,env(safe-area-inset-left,0px))}
+.fade-day{margin:0;font-size:clamp(30px,7vw,52px);font-weight:700;color:#3a2316;letter-spacing:.02em}
+.fade-sub{margin:0;font-size:clamp(15px,3.5vw,20px);color:#8a5a34}
+#pad{position:absolute;inset:auto 0 0 0;height:0}
+#stick{position:absolute;left:calc(26px + env(safe-area-inset-left,0px));bottom:calc(26px + env(safe-area-inset-bottom,0px));
+  width:124px;height:124px;border-radius:50%;background:rgba(92,46,20,.55);border:3px solid rgba(212,137,63,.7);touch-action:none}
+#knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;background:var(--wood-light);border:3px solid var(--wood-dark);box-shadow:inset 0 4px 0 rgba(255,255,255,.3)}
+#btnA{position:absolute;right:calc(30px + env(safe-area-inset-right,0px));bottom:calc(46px + env(safe-area-inset-bottom,0px));
+  width:84px;height:84px;border-radius:50%;font:700 30px var(--font-ui);color:var(--parchment);background:#4f8f3a;border:4px solid #2c5420;box-shadow:0 0 0 3px #8cc46a,inset 0 5px 0 rgba(255,255,255,.25);touch-action:none}
+#btnA:active{transform:translateY(2px)}
+#btnA:focus-visible{outline:3px solid var(--parchment);outline-offset:4px}
+
+@media (max-width:600px){
+  #dlg{gap:10px}
+  .dlg-text{min-height:110px;padding:10px 12px 22px}
+  .dlg-text p{font-size:16px}
+  .dlg-port{width:96px;padding:6px;gap:4px}
+  #portrait{width:72px;height:72px}
+  .nameplate{font-size:14px;padding:1px 6px}
+  .role{font-size:11px}
+  #hud{min-width:126px;padding:4px 9px 6px}
+  .hud-time{font-size:20px}
+  #hint{font-size:13px;max-width:calc(100% - 196px)}
+}
+@media (prefers-reduced-motion:reduce){.dlg-next{animation:none}.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="view"></canvas>
+
+  <div id="hud" class="frame" aria-live="off">
+    <div class="hud-row"><span id="hDay">Wed. 11</span><span class="muted">Day 1</span></div>
+    <div id="hTime" class="hud-time">9:00 am</div>
+    <div class="focus"><span>Focus</span><div class="bar"><i id="hFocus"></i></div></div>
+    <div class="hud-row"><span class="muted">Team met</span><span id="hMet" class="quest">0/12</span></div>
+    <div class="hud-row"><span class="muted">Coffee</span><span id="hCoffee">0</span></div>
+  </div>
+
+  <div id="hint" class="frame"></div>
+
+  <div id="fade" aria-hidden="true">
+    <p class="fade-day" id="fadeDay">Wednesday</p>
+    <p class="fade-sub">Day 1 · Your first day on the team</p>
+  </div>
+
+  <div id="dlg" hidden>
+    <div class="dlg-text frame"><p id="dlgText" aria-live="polite"></p><span class="dlg-next" id="dlgNext" hidden></span></div>
+    <div class="dlg-port frame" id="dlgPort">
+      <canvas id="portrait" width="48" height="48"></canvas>
+      <div class="nameplate" id="dlgName"></div>
+      <div class="role" id="dlgRole"></div>
+    </div>
+  </div>
+
+  <div id="pad" hidden>
+    <div id="stick"><i id="knob"></i></div>
+    <button id="btnA" type="button" aria-label="Interact">A</button>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+const T = 16;
+
+/* ---------- Map ----------
+   Columns: 1-16 open office | 17 wall | 18-23 meeting room (top) + lounge (bottom) | 24 wall | 25-28 kitchen
+   Legend: # wall, - wall face, w window, b sprint board, C clock, P poster
+           . floor, , kitchen tile, M welcome mat, d desk, n your new desk, c chair, p plant, s server rack,
+           k counter, m coffee machine, f fridge, x meeting table, y kitchen table, T ping pong, o sofa */
+function row(a, c17, b, c24, k) {
+  const s = "#" + a + c17 + b + c24 + k + "#";
+  if (s.length !== 30) console.warn("Map row has wrong length:", s);
+  return s;
+}
+const MAP = [
+  "#".repeat(30),
+  row("-ww-ww-bbb-ww-C-", "#", "ww-P-w", "#", "-ww-"),
+  row("p..............p", "#", "p....p", "#", "kmkf"),
+  row("................", "#", "..cc..", "#", ",,,,"),
+  row(".dddd....dddd...", "#", ".cxxc.", ".", ",,,,"),
+  row(".cccc....cccc...", "#", ".cxxc.", "#", ",yy,"),
+  row("................", "#", "..cc..", "#", ",yy,"),
+  row(".dddd....dddd...", ".", "......", "#", ",,,,"),
+  row(".cccc....cccc...", "#", "......", "#", ",,,,"),
+  row("................", "#", "p....p", "#", ",,,,"),
+  row(".dddd....dddn...", "#", "......", "#", ",,,,"),
+  row(".cccc....cccc...", "#", "######", "#", ",,,,"),
+  row("................", "#", "......", "#", ",,,,"),
+  row("................", "#", ".TTT..", "#", ",,,,"),
+  row("ss..............", "#", ".TTT..", "#", ",,,,"),
+  row("ss.............p", ".", "......", ".", ",,,p"),
+  row("................", "#", "......", "#", ",,,,"),
+  row("p...............", "#", "p....p", "#", "oo,,"),
+  row("pp....MMM.......", "#", "......", "#", ",,,,"),
+  "#".repeat(30),
+];
+const MW = 30, MH = MAP.length;
+const WALLS = "#-wbCP", OBJ = "dncpskmfxyTo";
+const at = (c, r) => (r < 0 || r >= MH || c < 0 || c >= MW) ? "#" : MAP[r][c];
+const isWall = ch => WALLS.includes(ch);
+const isDesk = ch => ch === "d" || ch === "n";
+const solid = ch => WALLS.includes(ch) || OBJ.includes(ch);
+function hash(c, r) {
+  let h = (c * 374761393 + r * 668265263) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = s => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * f)));
+  return "#" + [16, 8, 0].map(s => ch(s).toString(16).padStart(2, "0")).join("");
+}
+
+/* ---------- Palette ---------- */
+const C = {
+  out: "#2a1d24", void: "#1d1820",
+  carpetA: "#6f8190", carpetB: "#6a7b8a", carpetS: "#8297a6",
+  meet: "#4d776f", meetS: "#5e8a81",
+  woodA: "#b47c4a", woodB: "#a46f40", woodLine: "#8a5a33",
+  tileA: "#e6dcc8", tileB: "#d3c5ab", grout: "#bcae93",
+  wallTop: "#4a3a46", wallTopHi: "#5f4c5a", wallFace: "#e2cfa9", wallStripe: "#d8c39b", trim: "#c4a77c", base: "#8a6a4a",
+  deskTop: "#c99059", deskHi: "#e0a96f", deskFront: "#8f5d34", deskDark: "#6e4426",
+  chair: "#4a5d73", chairBack: "#34465a",
+};
+
+/* ---------- The team ----------
+   look: style = short | long | buzz | curly | bald, beard = none | stache | full | stubble
+   area: tiles the character wanders within (x0..x1, y0..y1) */
+const TEAM = [
+  { id: "sb", name: "S. B.", role: "Agile Team Lead", area: [4, 13, 2, 3],
+    look: { skin: "#e8b48e", hair: "#3b2a20", style: "short", beard: "full", shirt: "#b5523c", collar: "#e9dccb" },
+    repeat: [] },
+  { id: "ps", name: "P. S.", role: "Product Owner", area: [19, 22, 7, 10],
+    look: { skin: "#eebf98", hair: "#7d7468", style: "short", beard: "none", glasses: true, shirt: "#2f4066", collar: "#f0ece2" },
+    intro: [
+      { t: "Hi, I'm P. S., the product owner. I decide what we build, and in which order.", mood: "happy" },
+      { t: "If you ever wonder why a ticket matters, come ask me. That's literally my job.", mood: "neutral" }],
+    repeat: [
+      [{ t: "The backlog is refined, prioritised, and only slightly terrifying.", mood: "smirk" }],
+      [{ t: "Every story needs acceptance criteria. Our QA folks will make sure you remember that.", mood: "neutral" }],
+      [{ t: "Ship small, learn fast. Then ship small again.", mood: "happy" }]] },
+  { id: "aa", name: "A. A.", role: "Lead Front End Developer", area: [6, 12, 2, 3],
+    look: { skin: "#c68a5e", hair: "#1f1816", style: "curly", beard: "stubble", shirt: "#6a4c9c", hoodie: true },
+    intro: [
+      { t: "Hey! A. A., lead front end. I keep the front end in one piece. Mostly.", mood: "smirk" },
+      { t: "Your pull requests will come past me sooner or later. Small ones make me very happy.", mood: "happy" }],
+    repeat: [
+      [{ t: "Component first, page second. That's the rule.", mood: "neutral" }],
+      [{ t: "If the linter complains, the linter is right. Usually.", mood: "smirk" }]] },
+  { id: "ea", name: "E. A.", role: "Front End Developer", area: [1, 6, 6, 6],
+    look: { skin: "#f1c6a2", hair: "#d8b25a", style: "short", beard: "none", glasses: true, shirt: "#e07a5f" },
+    intro: [
+      { t: "Hi, I'm E. A., front end developer. Welcome to the team!", mood: "happy" },
+      { t: "Stuck getting the project running locally? Shout. Everyone gets stuck on day one.", mood: "neutral" }],
+    repeat: [
+      [{ t: "Hot reload is the greatest invention of our time.", mood: "happy" }],
+      [{ t: "CSS is easy, they said. Centre a div, they said.", mood: "smirk" }]] },
+  { id: "ir", name: "I. R.", role: "Front End Developer · Remote", area: [10, 15, 6, 6],
+    look: { skin: "#a8714a", hair: "#2a201a", style: "buzz", beard: "none", shirt: "#d9a43a", robot: true },
+    intro: [
+      { t: "Hey, I'm I. R., front end. Good to have you here. Well, good to have my robot here.", mood: "happy" },
+      { t: "Pro tip: clear the cache before you report a bug. Ask me how I know.", mood: "smirk" }],
+    repeat: [
+      [{ t: "Every pixel matters. Some pixels matter more than others.", mood: "neutral" }],
+      [{ t: "My browser has 47 tabs open. All of them are important.", mood: "smirk" }],
+      [{ t: "Remote life: my commute is twelve steps and a coffee machine.", mood: "happy" }]] },
+  { id: "jg", name: "J. G.", role: "Front End Developer", area: [1, 6, 9, 9],
+    look: { skin: "#eab48c", hair: "#6b4226", style: "short", beard: "stache", shirt: "#3d6fb0" },
+    intro: [
+      { t: "Hello! J. G., front end developer. Nice to meet you.", mood: "happy" },
+      { t: "First day tip: passwords go in the password manager. Not on a sticky note.", mood: "neutral" }],
+    repeat: [
+      [{ t: "Read the error message. Then read it again. It's usually telling the truth.", mood: "neutral" }],
+      [{ t: "Friday afternoon is for refactoring. Not for deploying.", mood: "smirk" }]] },
+  { id: "pw", name: "P. W.", role: "Front End Developer · Remote", area: [10, 15, 9, 9],
+    look: { skin: "#f0c09a", hair: "#5a3a26", style: "curly", beard: "none", glasses: true, shirt: "#2f3a4a", hoodie: true, robot: true },
+    intro: [
+      { t: "Hi, P. W., front end. Welcome!", mood: "happy" },
+      { t: "Pairing is the fastest way to learn the codebase. Grab any of us, any time.", mood: "neutral" }],
+    repeat: [
+      [{ t: "Naming things is the hardest part of this job.", mood: "neutral" }],
+      [{ t: "It's not a bug if we call it a feature. QA disagrees.", mood: "smirk" }],
+      [{ t: "This robot's battery lasts longer than my patience in long meetings.", mood: "smirk" }]] },
+  { id: "aw", name: "A. W.", role: "Front End Developer · Remote", area: [10, 15, 12, 12],
+    look: { skin: "#e9b896", hair: "#a0683a", style: "short", beard: "stubble", shirt: "#4a7fb0", robot: true },
+    intro: [
+      { t: "Hi! A. W., front end developer. Calling in from home today. Well, every day.", mood: "happy" },
+      { t: "If my robot bumps into you, blame the Wi-Fi. Not me.", mood: "smirk" }],
+    repeat: [
+      [{ t: "Can you hear me? You're on mute. No wait, I'm on mute.", mood: "happy" }],
+      [{ t: "My cat walked across the keyboard and approved a pull request. Kidding. Mostly.", mood: "smirk" }]] },
+  { id: "sk", name: "S. K.", role: "Front End Developer", area: [1, 7, 12, 12],
+    look: { skin: "#f3c9a8", hair: "#6a2f2a", style: "long", beard: "none", shirt: "#5aa0c8", lashes: true },
+    intro: [
+      { t: "Hi! I'm S. K., front end developer. Great to have you on the team.", mood: "happy" },
+      { t: "Ask questions early. Nobody expects you to know everything on your first day.", mood: "neutral" }],
+    repeat: [
+      [{ t: "Mobile first, then everything else.", mood: "neutral" }],
+      [{ t: "A good commit message is a gift to your future self.", mood: "happy" }]] },
+  { id: "jjo", name: "J. J. O.", role: "Middleware Developer", area: [3, 6, 13, 16],
+    look: { skin: "#ecb995", hair: "#b5562f", style: "bald", beard: "full", glasses: true, shirt: "#6b7380" },
+    intro: [
+      { t: "Hello, J. J. O., middleware. I connect the front end to everything behind it.", mood: "neutral" },
+      { t: "When an API answers with something strange, come find me. I'm usually near the servers.", mood: "smirk" }],
+    repeat: [
+      [{ t: "The front end calls me, I call the back end, the back end calls... someone.", mood: "smirk" }],
+      [{ t: "A timeout is just the system asking for patience.", mood: "neutral" }]] },
+  { id: "mr", name: "M. R.", role: "QA", area: [25, 28, 8, 12],
+    look: { skin: "#d9a07a", hair: "#1f1a1a", style: "short", beard: "none", glasses: true, shirt: "#a83a4a" },
+    intro: [
+      { t: "Hi, M. R., QA. Welcome to the team!", mood: "happy" },
+      { t: "My job is to find the bugs before the customers do. Please don't take it personally.", mood: "smirk" }],
+    repeat: [
+      [{ t: "Steps to reproduce, expected result, actual result. In that order.", mood: "neutral" }],
+      [{ t: "'Works on my machine' is not a test result.", mood: "smirk" }]] },
+  { id: "sd", name: "S. D.", role: "QA", area: [18, 23, 15, 16],
+    look: { skin: "#f0c4a0", hair: "#4a3226", style: "short", beard: "stubble", shirt: "#3a6e5a" },
+    intro: [
+      { t: "Hey! S. D., QA. Welcome aboard!", mood: "happy" },
+      { t: "Between M. R. and me, nothing reaches production untested. Well, almost nothing.", mood: "smirk" }],
+    repeat: [
+      [{ t: "The automated tests run at night, so we don't have to.", mood: "happy" }],
+      [{ t: "Edge cases are my favourite cases.", mood: "smirk" }]] },
+];
+const BYID = Object.fromEntries(TEAM.map(t => [t.id, t]));
+
+/* ---------- Canvas setup ---------- */
+const game = document.getElementById("game");
+const cv = document.getElementById("view");
+const g = cv.getContext("2d");
+function resize() {
+  const w = game.clientWidth, h = game.clientHeight;
+  const s = Math.max(2, Math.round(Math.min(w / 320, h / 210)));
+  cv.width = Math.ceil(w / s);
+  cv.height = Math.ceil(h / s);
+  cv.style.width = cv.width * s + "px";
+  cv.style.height = cv.height * s + "px";
+  g.imageSmoothingEnabled = false;
+}
+addEventListener("resize", resize);
+resize();
+
+const F = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+function disc(cx, cy, r, c) {
+  g.fillStyle = c;
+  for (let dy = -r; dy <= r; dy++) {
+    const w = Math.floor(Math.sqrt(r * r - dy * dy + r * 0.8));
+    g.fillRect(cx - w, cy + dy, w * 2 + 1, 1);
+  }
+}
+function pline(x0, y0, x1, y1, c) {
+  g.fillStyle = c;
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    g.fillRect(x0, y0, 1, 1);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+/* Sprite builder: "r" rects form the silhouette and get a dark outline, "d" rects are inner details */
+function Spr() {
+  const R = [], D = [];
+  return {
+    r(x, y, w, h, c) { R.push([x, y, w, h, c]); },
+    d(x, y, w, h, c) { D.push([x, y, w, h, c]); },
+    draw(ctx) {
+      ctx.fillStyle = C.out;
+      for (const [x, y, w, h] of R) ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+      for (const [x, y, w, h, c] of R) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+      for (const [x, y, w, h, c] of D) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+    },
+  };
+}
+
+/* ---------- Game state ---------- */
+const state = { minutes: 9 * 60, tickAcc: 0, focus: 80, coffees: 0, met: [], introDone: false, questDone: false };
+const PLAYER_LOOK = { skin: "#f1c29a", hair: "#c9853a", style: "short", beard: "none", shirt: "#2f8f8a", lanyard: true };
+const player = { x: 8 * T + 8, y: 19 * T - 2, dir: "up", step: 0, stepT: 0, moving: false, look: PLAYER_LOOK };
+
+function tileFeet(c, r) { return [c * T + 8, (r + 1) * T - 2]; }
+const npcs = TEAM.map(def => {
+  const [x0, x1, y0, y1] = def.area;
+  const [x, y] = def.id === "sb" ? tileFeet(9, 3) : tileFeet(Math.round((x0 + x1) / 2), y0 + ((y1 - y0) >> 1));
+  return { def, look: def.look, x, y, dir: "down", step: 0, stepT: 0, moving: false, target: null, wait: 1 + Math.random() * 3, forced: false };
+});
+const SB = npcs[0];
+SB.dir = "up";
+
+/* ---------- Opening cutscene ----------
+   fade: white screen fades out while you walk in from the door
+   look: a short beat   notice: S. B. spots you, "!" pops   approach: he walks over   talk: welcome dialogue */
+const cut = { phase: "fade", t: 0, walk: tileFeet(8, 16)[1], arrived: false };
+const fadeEl = document.getElementById("fade");
+let camFX = player.x, camFY = player.y;
+function setPhase(p) { cut.phase = p; cut.t = 0; }
+function updateCutscene(dt) {
+  if (cut.phase === "done") return;
+  cut.t += dt;
+  if (cut.phase === "fade") {
+    fadeEl.style.opacity = Math.max(0, Math.min(1, 1 - (cut.t - 1.1) / 1.4));
+    if (cut.t >= 2.5 && cut.arrived) { fadeEl.hidden = true; setPhase("look"); }
+  } else if (cut.phase === "look") {
+    if (cut.t >= 0.6) { SB.dir = "down"; setPhase("notice"); }
+  } else if (cut.phase === "notice") {
+    if (cut.t >= 1.4) { SB.forced = true; SB.target = tileFeet(8, 15); setPhase("approach"); }
+  } else if (cut.phase === "approach") {
+    if (!SB.target) { SB.dir = "down"; player.dir = "up"; setPhase("talk"); startIntro(); }
+  }
+}
+function camFocus() { return cut.phase === "notice" || cut.phase === "approach" ? SB : player; }
+const chars = [player, ...npcs];
+let talkingTo = null;
+
+/* ---------- Floors & walls ---------- */
+function floorStyle(c, r, ch) {
+  if (ch === "," || c >= 24) return "tile";
+  if (c >= 18 && c <= 23) return r < 11 ? "meet" : "wood";
+  return "carpet";
+}
+function drawFloor(c, r, px, py, ch) {
+  const st = floorStyle(c, r, ch), n = hash(c, r);
+  if (st === "carpet") {
+    F(px, py, T, T, (c + r) & 1 ? C.carpetA : C.carpetB);
+    for (let i = 0; i < 3; i++) F(px + ((n >>> (i * 8)) & 15), py + ((n >>> (i * 8 + 4)) & 15), 1, 1, C.carpetS);
+  } else if (st === "meet") {
+    F(px, py, T, T, C.meet);
+    F(px + 3, py + 3, 1, 1, C.meetS); F(px + 11, py + 11, 1, 1, C.meetS);
+    F(px + 11, py + 3, 1, 1, C.meetS); F(px + 3, py + 11, 1, 1, C.meetS);
+  } else if (st === "wood") {
+    for (let i = 0; i < 4; i++) {
+      F(px, py + i * 4, T, 4, (r * 4 + i) % 2 ? C.woodA : C.woodB);
+      F(px, py + i * 4 + 3, T, 1, C.woodLine);
+      const j = (hash(c, r * 4 + i) & 15);
+      if (j < 8) F(px + j * 2, py + i * 4, 1, 3, C.woodLine);
+    }
+  } else {
+    F(px, py, T, T, C.grout);
+    F(px, py, 7, 7, C.tileA); F(px + 8, py + 8, 7, 7, C.tileA);
+    F(px + 8, py, 7, 7, C.tileB); F(px, py + 8, 7, 7, C.tileB);
+  }
+  if (ch === "M") {
+    const L = at(c - 1, r) === "M", R = at(c + 1, r) === "M";
+    F(px, py + 2, T, 12, "#8a3b2e");
+    F(px, py + 3, T, 10, "#b5523c");
+    F(px, py + 2, T, 1, "#6a2a22"); F(px, py + 13, T, 1, "#6a2a22");
+    if (!L) F(px + 1, py + 2, 1, 12, "#6a2a22");
+    if (!R) F(px + 14, py + 2, 1, 12, "#6a2a22");
+    if (L && R) { F(px + 3, py + 6, 10, 1, "#f2c46d"); F(px + 3, py + 9, 10, 1, "#f2c46d"); F(px + 7, py + 6, 2, 4, "#f2c46d"); }
+  }
+}
+function drawWall(c, r, px, py, ch) {
+  const below = at(c, r + 1), above = at(c, r - 1);
+  const face = ch !== "#" || !isWall(below);
+  if (!face) {
+    F(px, py, T, T, C.wallTop);
+    if (!isWall(at(c - 1, r))) F(px, py, 1, T, C.wallTopHi);
+    if (!isWall(at(c + 1, r))) F(px + 15, py, 1, T, C.wallTopHi);
+    return;
+  }
+  F(px, py, T, T, C.wallFace);
+  F(px + 4, py, 1, T, C.wallStripe); F(px + 12, py, 1, T, C.wallStripe);
+  let top = 0;
+  if (!isWall(above)) { F(px, py, T, 4, C.wallTop); F(px, py + 3, T, 1, C.wallTopHi); top = 4; }
+  F(px, py + top, T, 2, C.trim);
+  F(px, py + 13, T, 3, C.base);
+  F(px, py + 13, T, 1, "#a07c57");
+
+  if (ch === "w") {
+    F(px + 1, py + 2, 14, 11, "#f2e6cf");
+    F(px + 2, py + 3, 12, 9, "#8fbcd6");
+    F(px + 2, py + 3, 12, 3, "#a9d0e4");
+    if (hash(c, 1) & 1) { F(px + 4, py + 5, 4, 1, "#f4f8fb"); F(px + 5, py + 4, 2, 1, "#f4f8fb"); }
+    F(px + 7, py + 3, 2, 9, "#f2e6cf"); F(px + 2, py + 7, 12, 1, "#f2e6cf");
+    F(px + 10, py + 9, 1, 1, "#d6ecf6"); F(px + 11, py + 8, 1, 1, "#d6ecf6");
+    F(px + 1, py + 12, 14, 1, "#c9b48f");
+  } else if (ch === "b" && at(c - 1, r) !== "b") {
+    let n = 0; while (at(c + n, r) === "b") n++;
+    const x = px + 1, y = py + 2, w = n * T - 2, h = 11;
+    F(x - 1, y - 1, w + 2, h + 2, C.out);
+    F(x, y, w, h, "#aeb6bf");
+    F(x + 1, y + 1, w - 2, h - 2, "#f7f6f1");
+    const notes = ["#f6d65b", "#f29bb0", "#8fd6e8", "#a8e07a"];
+    const counts = [4, 3, 1];
+    for (let k = 0; k < n; k++) {
+      const cx = x + 1 + k * T;
+      if (k > 0) F(cx - 1, y + 1, 1, h - 2, "#c9d0d6");
+      F(cx + 2, y + 2, 9, 1, "#7d8792");
+      for (let i = 0; i < (counts[k] ?? 1); i++) {
+        F(cx + 2 + (i % 2) * 5, y + 4 + Math.floor(i / 2) * 3, 4, 2, notes[(k + i) % 4]);
+      }
+    }
+    F(x + 2, y + h, w - 4, 1, "#8a929b");
+  } else if (ch === "C") {
+    disc(px + 8, py + 7, 5, C.out);
+    disc(px + 8, py + 7, 4, "#f7f3ea");
+    const m = state.minutes;
+    const ma = ((m % 60) / 60) * Math.PI * 2, ha = (((m / 60) % 12) / 12) * Math.PI * 2;
+    pline(px + 8, py + 7, Math.round(px + 8 + Math.sin(ma) * 3), Math.round(py + 7 - Math.cos(ma) * 3), C.out);
+    pline(px + 8, py + 7, Math.round(px + 8 + Math.sin(ha) * 2), Math.round(py + 7 - Math.cos(ha) * 2), "#c0443b");
+  } else if (ch === "P") {
+    F(px + 3, py + 2, 10, 11, C.out);
+    F(px + 4, py + 3, 8, 9, "#3d5a80");
+    F(px + 9, py + 4, 2, 2, "#f2c46d");
+    F(px + 5, py + 9, 6, 2, "#e9788a"); F(px + 6, py + 8, 4, 1, "#e9788a"); F(px + 7, py + 7, 2, 1, "#f7f3ea");
+  }
+}
+
+/* ---------- Furniture ---------- */
+const CODE = ["#7fd1b9", "#f2c46d", "#e9788a", "#9db4ff"];
+function drawDesk(c, r, px, py, time, mine) {
+  const L = isDesk(at(c - 1, r)), R = isDesk(at(c + 1, r)), n = hash(c, r);
+  F(px, py + 16, T, 2, "rgba(20,10,20,.22)");
+  F(px, py + 1, T, 1, C.out);
+  F(px, py + 2, T, 10, C.deskTop);
+  F(px, py + 2, T, 1, C.deskHi);
+  F(px, py + 12, T, 4, C.deskFront);
+  F(px, py + 15, T, 1, C.deskDark);
+  if (!L) F(px, py + 1, 1, 15, C.out);
+  if (!R) F(px + 15, py + 1, 1, 15, C.out);
+  if (mine) {
+    // laptop still in its box, a welcome card and a balloon
+    F(px + 2, py + 3, 9, 7, C.out); F(px + 3, py + 4, 7, 5, "#c9a46e"); F(px + 3, py + 6, 7, 1, "#a8844f");
+    F(px + 11, py + 6, 3, 4, "#f7f3ea"); F(px + 11, py + 6, 3, 1, "#e9788a");
+    const sway = Math.round(Math.sin(time * 1.6) * 1.5);
+    pline(px + 13, py + 6, px + 13 + sway, py - 9, "#f7f3ea");
+    disc(px + 13 + sway, py - 14, 5, C.out);
+    disc(px + 13 + sway, py - 14, 4, "#e2574c");
+    F(px + 11 + sway, py - 17, 2, 2, "#f4a49c");
+    return;
+  }
+  const mx = px + 3, my = py - 4;
+  F(mx - 1, my - 1, 12, 9, C.out);
+  F(mx, my, 10, 7, "#2b2f3a");
+  F(mx + 1, my + 1, 8, 5, "#14263a");
+  const failed = (n % 7) === 0;
+  F(mx + 2, my + 2, 2 + (n & 3), 1, failed ? "#e9788a" : CODE[n & 3]);
+  F(mx + 3, my + 4, 1 + ((n >>> 3) & 3), 1, CODE[(n >>> 5) & 3]);
+  if (Math.floor(time * 2 + (n & 7)) % 2) F(mx + 6, my + 4, 1, 1, "#f7f3ea");
+  F(mx + 4, my + 7, 2, 2, "#2b2f3a");
+  F(mx + 2, my + 9, 6, 1, "#2b2f3a");
+  F(px + 4, py + 8, 8, 2, "#cfd5dc"); F(px + 4, py + 10, 8, 1, "#9aa3ad");
+  if ((n >>> 9) % 3 === 0) { F(px + 12, py + 5, 3, 3, "#f7f3ea"); F(px + 12, py + 5, 3, 1, "#5a3a26"); }
+}
+function drawChair(px, py) {
+  F(px + 3, py + 1, 10, 12, C.out);
+  F(px + 4, py + 2, 8, 6, C.chair);
+  F(px + 4, py + 2, 8, 1, "#5c7189");
+  F(px + 4, py + 8, 8, 4, C.chairBack);
+  F(px + 6, py + 13, 4, 2, C.out);
+}
+function drawPlant(px, py) {
+  F(px + 3, py + 15, 10, 2, "rgba(20,10,20,.25)");
+  disc(px + 8, py - 1, 7, C.out);
+  disc(px + 8, py - 1, 6, "#3f7a34");
+  disc(px + 6, py - 2, 4, "#5a9e40");
+  disc(px + 11, py + 1, 3, "#5a9e40");
+  disc(px + 6, py - 4, 2, "#7cc153");
+  F(px + 3, py + 7, 10, 9, C.out);
+  F(px + 4, py + 8, 8, 7, "#b8643a");
+  F(px + 4, py + 8, 8, 2, "#d88050");
+  F(px + 10, py + 10, 2, 5, "#9a5230");
+}
+function drawServer(px, py, time) {
+  const x = px, y = py - 12, w = 32, h = 44;
+  F(x, y + h, w, 2, "rgba(20,10,20,.3)");
+  F(x, y, w, h, C.out);
+  F(x + 1, y + 1, w - 2, h - 2, "#2f343e");
+  F(x + 1, y + 1, w - 2, 4, "#4a5262");
+  for (let i = 0; i < 9; i++) {
+    const uy = y + 7 + i * 4;
+    F(x + 3, uy, w - 6, 3, "#3b4250");
+    F(x + 3, uy + 3, w - 6, 1, "#232831");
+    const on = Math.floor(time * 3 + i * 1.7) % 4 !== 0;
+    F(x + 5, uy + 1, 1, 1, on ? "#6ee07a" : "#2a5a32");
+    F(x + 7, uy + 1, 1, 1, i === 4 ? (Math.floor(time * 2) % 2 ? "#f2b84b" : "#6b4d1e") : "#6ee07a");
+    F(x + 12, uy + 1, 14, 1, "#2a2f39");
+  }
+}
+function drawCounter(c, r, px, py) {
+  F(px, py, T, 6, "#e6e0d6");
+  F(px, py, T, 1, "#f5f1ea");
+  F(px, py + 6, T, 10, "#8b6544");
+  F(px, py + 6, T, 1, "#6e4c31");
+  F(px + 7, py + 7, 1, 9, "#6e4c31");
+  F(px + 5, py + 10, 1, 2, "#e6d3a8"); F(px + 10, py + 10, 1, 2, "#e6d3a8");
+  if (at(c - 1, r) !== "k" && at(c - 1, r) !== "m") F(px, py, 1, T, C.out);
+}
+function drawCoffee(px, py, time) {
+  F(px + 2, py - 8, 12, 14, C.out);
+  F(px + 3, py - 7, 10, 12, "#3c3c44");
+  F(px + 3, py - 7, 10, 2, "#55555f");
+  F(px + 5, py - 4, 6, 2, "#7fd1e8");
+  F(px + 11, py - 4, 1, 1, Math.floor(time * 2) % 2 ? "#e9788a" : "#7a3a40");
+  F(px + 5, py - 1, 6, 5, "#1e1e24");
+  F(px + 6, py + 1, 4, 3, "#f7f3ea");
+  F(px + 6, py + 1, 4, 1, "#5a3a26");
+}
+function drawFridge(px, py) {
+  F(px + 1, py - 14, 14, 30, C.out);
+  F(px + 2, py - 13, 12, 28, "#dfe7ea");
+  F(px + 12, py - 13, 2, 28, "#c4d0d5");
+  F(px + 2, py - 3, 12, 1, "#a9b6bc");
+  F(px + 10, py - 10, 1, 4, "#8a979d"); F(px + 10, py + 0, 1, 5, "#8a979d");
+  F(px + 4, py - 9, 2, 2, "#e9788a"); F(px + 5, py + 3, 3, 3, "#f6d65b");
+}
+function drawTable(c, r, px, py, ch, top, apron, line) {
+  const U = at(c, r - 1) === ch, D = at(c, r + 1) === ch, L = at(c - 1, r) === ch, R = at(c + 1, r) === ch;
+  const y0 = U ? py : py + 2, y1 = D ? py + 16 : py + 12;
+  if (!D) F(px, py + 15, T, 2, "rgba(20,10,20,.25)");
+  F(px, y0, T, y1 - y0, top);
+  if (!U) { F(px, y0 - 1, T, 1, C.out); F(px, y0, T, 1, "rgba(255,255,255,.18)"); }
+  if (!D) { F(px, py + 12, T, 3, apron); F(px, py + 15, T, 1, C.out); }
+  if (!L) F(px, y0 - 1, 1, py + 16 - y0 + 1, C.out);
+  if (!R) F(px + 15, y0 - 1, 1, py + 16 - y0 + 1, C.out);
+  if (line) {
+    if (!U) F(px + (L ? 0 : 2), y0 + 1, T - (L ? 0 : 2) - (R ? 0 : 2), 1, line);
+    if (!D) F(px + (L ? 0 : 2), y1 - 2, T - (L ? 0 : 2) - (R ? 0 : 2), 1, line);
+    if (!L) F(px + 2, y0 + 1, 1, y1 - y0 - 2, line);
+    if (!R) F(px + 13, y0 + 1, 1, y1 - y0 - 2, line);
+    if (L && R) { F(px + 7, y0, 2, y1 - y0, "#dfe7ea"); F(px + 7, y0, 2, 1, C.out); }
+  } else {
+    F(px + 2, y0 + 4, 8, 1, "rgba(0,0,0,.1)");
+  }
+}
+function drawSofa(c, r, px, py) {
+  const L = at(c - 1, r) === "o", R = at(c + 1, r) === "o";
+  const a = L ? 0 : 1, w = T - a - (R ? 0 : 1);
+  F(px, py + 15, T, 2, "rgba(20,10,20,.25)");
+  F(px, py + 1, T, 15, C.out);
+  F(px + a, py + 2, w, 6, "#8e4556");
+  F(px + a, py + 8, w, 5, "#b85b6d");
+  F(px + a, py + 8, w, 1, "#cd7384");
+  F(px + a, py + 13, w, 2, "#7a3a49");
+  if (!L) F(px + 1, py + 4, 3, 11, "#a24f61");
+  if (!R) F(px + 12, py + 4, 3, 11, "#a24f61");
+}
+function drawObject(ch, c, r, px, py, time) {
+  switch (ch) {
+    case "d": return drawDesk(c, r, px, py, time, false);
+    case "n": return drawDesk(c, r, px, py, time, true);
+    case "c": return drawChair(px, py);
+    case "p": return drawPlant(px, py);
+    case "s": return drawServer(px, py, time);
+    case "k": return drawCounter(c, r, px, py);
+    case "m": drawCounter(c, r, px, py); return drawCoffee(px, py, time);
+    case "f": return drawFridge(px, py);
+    case "x": return drawTable(c, r, px, py, "x", "#a8703f", "#7a4d2a", null);
+    case "y": return drawTable(c, r, px, py, "y", "#c99a62", "#8f6a3e", null);
+    case "T": return drawTable(c, r, px, py, "T", "#2f7d5a", "#1f4f3a", "#e8f0ea");
+    case "o": return drawSofa(c, r, px, py);
+  }
+}
+
+/* ---------- Characters (world sprite) ---------- */
+function drawPerson(e) {
+  const L = e.look;
+  if (L.robot) return drawRobot(e);
+  const x = Math.round(e.x), y = Math.round(e.y), mv = e.moving, st = e.step;
+  const b = mv && (st & 1) ? -1 : 0;
+  const sw = mv ? [0, 1, 0, -1][st & 3] : 0;
+  const dir = e.dir, side = dir === "left" || dir === "right", left = dir === "left";
+  const pants = L.pants || "#3b4a6b", shoes = "#2a2230", shirt2 = shade(L.shirt, 0.78);
+  F(x - 6, y - 1, 12, 2, "rgba(20,10,20,.28)");
+  F(x - 4, y - 2, 8, 4, "rgba(20,10,20,.18)");
+  const s = Spr();
+  const hy = y - 24 + b;
+
+  // long hair sits behind the body
+  if (L.style === "long") {
+    if (dir === "down") s.r(x - 6, hy + 3, 12, 11, L.hair);
+    else if (side) s.r(left ? x : x - 6, hy + 3, 6, 11, L.hair);
+  }
+  if (side) {
+    s.r(x - 2 + sw, y - 6, 3, 6, pants); s.r(x - 1 - sw, y - 6, 3, 6, pants);
+    s.d(x - 2 + sw, y - 2, 3, 2, shoes); s.d(x - 1 - sw, y - 2, 3, 2, shoes);
+  } else {
+    const a = sw > 0 ? 1 : 0, c = sw < 0 ? 1 : 0;
+    s.r(x - 4, y - 6, 3, 6 - a, pants); s.r(x + 1, y - 6, 3, 6 - c, pants);
+    s.d(x - 4, y - 2 - a, 3, 2, shoes); s.d(x + 1, y - 2 - c, 3, 2, shoes);
+  }
+  s.r(x - 5, y - 14 + b, 10, 9, L.shirt);
+  s.d(x - 5, y - 6 + b, 10, 1, shirt2);
+  if (!side) {
+    const la = sw > 0 ? 1 : 0, ra = sw < 0 ? 1 : 0;
+    s.r(x - 7, y - 13 + b + la, 2, 5, L.shirt); s.r(x - 7, y - 8 + b + la, 2, 2, L.skin);
+    s.r(x + 5, y - 13 + b + ra, 2, 5, L.shirt); s.r(x + 5, y - 8 + b + ra, 2, 2, L.skin);
+  }
+  s.r(x - 5, y - 23 + b, 10, 9, L.skin);
+
+  const H = L.hair;
+  switch (L.style) {
+    case "buzz":
+      if (dir === "up") s.r(x - 5, hy + 1, 10, 8, H);
+      else { s.r(x - 5, hy + 1, 10, 2, H); if (side) s.r(left ? x + 1 : x - 5, hy + 3, 4, 3, H); }
+      break;
+    case "curly":
+      if (dir === "up") s.r(x - 7, hy - 1, 14, 11, H);
+      else {
+        s.r(x - 7, hy - 1, 14, 5, H);
+        if (dir === "down") { s.r(x - 7, hy + 4, 3, 3, H); s.r(x + 4, hy + 4, 3, 3, H); }
+        else s.r(left ? x + 1 : x - 7, hy + 3, 6, 6, H);
+      }
+      break;
+    case "bald":
+      if (dir === "down") { s.r(x - 6, hy + 5, 1, 3, H); s.r(x + 5, hy + 5, 1, 3, H); }
+      else if (dir === "up") s.r(x - 5, hy + 5, 10, 3, H);
+      else s.r(left ? x + 2 : x - 5, hy + 5, 3, 3, H);
+      break;
+    case "long":
+      if (dir === "up") s.r(x - 6, hy, 12, 14, H);
+      else {
+        s.r(x - 6, hy, 12, 4, H);
+        if (dir === "down") { s.r(x - 6, hy + 4, 2, 9, H); s.r(x + 4, hy + 4, 2, 9, H); }
+        else s.r(left ? x + 1 : x - 6, hy + 3, 5, 10, H);
+      }
+      break;
+    default:
+      if (dir === "up") s.r(x - 6, hy, 12, 10, H);
+      else {
+        s.r(x - 6, hy, 12, 4, H);
+        if (dir === "down") { s.r(x - 6, hy + 4, 2, 3, H); s.r(x + 4, hy + 4, 2, 3, H); }
+        else s.r(left ? x + 1 : x - 6, hy + 3, 5, 5, H);
+      }
+  }
+  if (L.style === "bald" && dir !== "up") s.d(x - 2, hy + 2, 3, 1, shade(L.skin, 1.12));
+
+  if (side) {
+    const ax = x - 1 + (left ? -sw : sw);
+    s.d(ax, y - 13 + b, 2, 5, shirt2); s.d(ax, y - 8 + b, 2, 2, L.skin);
+  }
+  const ey = y - 19 + b, fr = "#3a2a2a", lens = "#dce9ef";
+  if (dir === "down") {
+    if (L.collar) s.d(x - 2, y - 14 + b, 4, 2, L.collar);
+    if (L.hoodie) { s.d(x - 2, y - 13 + b, 1, 3, "#e9e4da"); s.d(x + 1, y - 13 + b, 1, 3, "#e9e4da"); }
+    if (L.lanyard) { s.d(x - 1, y - 14 + b, 1, 4, "#e9d36a"); s.d(x - 2, y - 10 + b, 3, 3, "#f4f1e8"); s.d(x - 2, y - 10 + b, 3, 1, "#2f8f8a"); }
+    if (L.beard === "full") { s.d(x - 4, y - 17 + b, 8, 3, H); s.d(x - 5, y - 19 + b, 1, 3, H); s.d(x + 4, y - 19 + b, 1, 3, H); s.d(x - 1, y - 16 + b, 2, 1, "#7a3a32"); }
+    if (L.beard === "stubble") s.d(x - 3, y - 16 + b, 6, 2, shade(L.skin, 0.85));
+    if (L.glasses) {
+      s.d(x - 5, ey - 1, 4, 3, fr); s.d(x + 1, ey - 1, 4, 3, fr); s.d(x - 1, ey - 1, 2, 1, fr);
+      s.d(x - 4, ey, 2, 1, lens); s.d(x + 2, ey, 2, 1, lens);
+      s.d(x - 3, ey, 1, 1, C.out); s.d(x + 2, ey, 1, 1, C.out);
+    } else { s.d(x - 3, ey, 1, 2, C.out); s.d(x + 2, ey, 1, 2, C.out); }
+    if (L.beard === "stache") s.d(x - 2, y - 16 + b, 4, 1, H);
+    else if (L.beard === "none" || !L.beard) s.d(x - 1, y - 16 + b, 2, 1, shade(L.skin, 0.82));
+  } else if (side) {
+    if (L.beard === "full") s.d(left ? x - 5 : x - 1, y - 17 + b, 6, 3, H);
+    if (L.beard === "stubble") s.d(left ? x - 5 : x, y - 16 + b, 5, 2, shade(L.skin, 0.85));
+    if (L.glasses) {
+      s.d(left ? x - 6 : x + 2, ey - 1, 4, 3, fr); s.d(left ? x - 5 : x + 3, ey, 2, 1, lens);
+      s.d(left ? x - 5 : x + 4, ey, 1, 1, C.out);
+    } else s.d(left ? x - 4 : x + 3, ey, 1, 2, C.out);
+    if (L.beard === "stache") s.d(left ? x - 5 : x + 2, y - 16 + b, 3, 1, H);
+  }
+  s.draw(g);
+}
+function drawRobot(e) {
+  const L = e.look;
+  const x = Math.round(e.x), y = Math.round(e.y), dir = e.dir;
+  const side = dir === "left" || dir === "right", left = dir === "left";
+  const roll = e.moving ? (e.step & 1) : 0;
+  F(x - 7, y - 1, 14, 2, "rgba(20,10,20,.28)");
+  F(x - 5, y - 2, 10, 4, "rgba(20,10,20,.18)");
+  // base with wheels and status light
+  F(x - 7, y - 6, 14, 6, C.out);
+  F(x - 6, y - 5, 12, 4, "#3a3f4a");
+  F(x - 6, y - 5, 12, 1, "#565d6b");
+  F(x - 5 + roll, y - 2, 2, 1, "#8a929b"); F(x + 2 + roll, y - 2, 2, 1, "#8a929b");
+  F(x - 1, y - 4, 2, 1, Math.floor(performance.now() / 600) % 2 ? "#6ee07a" : "#2f7a3a");
+  // pole
+  F(x - 2, y - 16, 4, 11, C.out);
+  F(x - 1, y - 16, 2, 10, "#9aa3ad");
+  // antenna
+  F(x, y - 32, 1, 4, C.out);
+  F(x - 1, y - 34, 3, 2, C.out);
+  F(x, y - 33, 1, 1, Math.floor(performance.now() / 450) % 2 ? "#e2574c" : "#7a2a24");
+  if (side) {
+    F(x - 2, y - 29, 5, 14, C.out);
+    F(x - 1, y - 28, 3, 12, "#2b2f3a");
+    F(left ? x - 1 : x + 1, y - 27, 1, 10, "#5c7189");
+    return;
+  }
+  // screen
+  F(x - 8, y - 29, 16, 14, C.out);
+  F(x - 7, y - 28, 14, 12, "#2b2f3a");
+  if (dir === "up") {
+    F(x - 6, y - 27, 12, 10, "#4a505c");
+    for (let i = 0; i < 3; i++) F(x - 4, y - 25 + i * 3, 8, 1, "#2f343e");
+    return;
+  }
+  const sx = x - 6, sy = y - 27;
+  F(sx, sy, 12, 10, "#24485c");
+  F(sx, sy, 12, 1, "#2f5a70");
+  // tiny face on the screen
+  const H = L.hair, sk = L.skin;
+  F(sx + 2, sy + 9, 8, 1, L.shirt);
+  F(sx + 3, sy + 2, 6, 7, sk);
+  if (L.style === "curly") { F(sx + 2, sy + 1, 8, 2, H); F(sx + 2, sy + 3, 1, 2, H); F(sx + 9, sy + 3, 1, 2, H); }
+  else if (L.style === "buzz") F(sx + 3, sy + 2, 6, 1, H);
+  else if (L.style !== "bald") { F(sx + 3, sy + 1, 6, 2, H); F(sx + 2, sy + 2, 1, 2, H); F(sx + 9, sy + 2, 1, 2, H); }
+  if (L.glasses) { F(sx + 3, sy + 4, 6, 1, "#3a2a2a"); }
+  F(sx + 4, sy + 5, 1, 1, C.out); F(sx + 7, sy + 5, 1, 1, C.out);
+  if (L.beard === "stubble" || L.beard === "full") F(sx + 4, sy + 7, 4, 1, shade(sk, 0.82));
+  else F(sx + 5, sy + 7, 2, 1, shade(sk, 0.78));
+  // scanline shimmer
+  const scan = Math.floor(performance.now() / 120) % 10;
+  F(sx, sy + scan, 12, 1, "rgba(255,255,255,.12)");
+}
+function drawBubble(x, y) {
+  x = Math.round(x); y = Math.round(y) - (Math.floor(performance.now() / 400) % 2);
+  F(x - 7, y - 6, 14, 9, C.out);
+  F(x - 6, y - 5, 12, 7, "#f7f3ea");
+  F(x - 1, y + 3, 3, 2, C.out); F(x, y + 2, 1, 2, "#f7f3ea");
+  F(x - 4, y - 2, 2, 2, C.out); F(x - 1, y - 2, 2, 2, C.out); F(x + 2, y - 2, 2, 2, C.out);
+}
+function drawNotice(x, y, t) {
+  x = Math.round(x); y = Math.round(y);
+  const pop = t < 0.08 ? 4 : t < 0.16 ? -2 : 0;
+  y -= pop;
+  F(x - 5, y - 13, 11, 13, C.out);
+  F(x - 4, y - 12, 9, 11, "#f7f3ea");
+  F(x - 1, y, 3, 3, C.out); F(x, y - 1, 1, 2, "#f7f3ea");
+  F(x - 1, y - 10, 3, 5, "#d6453a");
+  F(x - 1, y - 4, 3, 2, "#d6453a");
+}
+function drawExclaim(x, y) {
+  x = Math.round(x); y = Math.round(y) - (Math.floor(performance.now() / 350) % 2);
+  F(x - 2, y - 9, 5, 8, C.out); F(x - 2, y, 5, 4, C.out);
+  F(x - 1, y - 8, 3, 6, "#f6d65b"); F(x - 1, y + 1, 3, 2, "#f6d65b");
+}
+
+/* ---------- Portrait (48x48, scaled up in CSS) ---------- */
+const pcv = document.getElementById("portrait");
+const pg = pcv.getContext("2d");
+function drawPortrait(L, mood) {
+  pg.clearRect(0, 0, 48, 48);
+  const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  if (L.robot) { P(0, 0, 48, 48, "#24485c"); P(0, 0, 48, 12, "#2a5268"); }
+  const skin = L.skin, sk2 = shade(skin, 0.86), H = L.hair, H2 = shade(H, 0.72), hi = shade(H, 1.3);
+  const fr = "#3a2a2a", lens = "#dce9ef", lip = "#7a3a32";
+  const s = Spr();
+  if (L.style === "long") s.r(9, 9, 30, 33, H);
+  s.r(5, 41, 38, 7, L.shirt); s.r(9, 37, 30, 5, L.shirt);
+  s.r(19, 31, 10, 7, skin);
+  s.r(12, 10, 24, 20, skin); s.r(14, 30, 20, 3, skin); s.r(17, 33, 14, 2, skin);
+  if (L.style !== "long") { s.r(10, 19, 2, 6, skin); s.r(36, 19, 2, 6, skin); }
+  switch (L.style) {
+    case "long": s.r(11, 5, 26, 8, H); s.r(9, 8, 5, 22, H); s.r(34, 8, 5, 22, H); s.r(15, 3, 18, 3, H); break;
+    case "buzz": s.r(12, 6, 24, 6, H); s.r(11, 10, 2, 7, H); s.r(35, 10, 2, 7, H); break;
+    case "curly": s.r(9, 3, 30, 10, H); s.r(7, 7, 5, 12, H); s.r(36, 7, 5, 12, H); s.r(12, 1, 8, 3, H); s.r(22, 0, 8, 4, H); s.r(31, 2, 6, 3, H); break;
+    case "bald": s.r(9, 15, 4, 8, H); s.r(35, 15, 4, 8, H); break;
+    default: s.r(11, 5, 26, 7, H); s.r(9, 8, 4, 11, H); s.r(35, 8, 4, 11, H); s.r(14, 3, 8, 3, H); s.r(25, 3, 9, 3, H);
+  }
+  if (L.beard === "full") { s.r(12, 26, 24, 7, H); s.r(15, 33, 18, 4, H); }
+  s.draw(pg);
+
+  // clothes
+  const sh2 = shade(L.shirt, 0.78);
+  P(5, 46, 38, 2, sh2); P(9, 37, 2, 9, sh2); P(37, 37, 2, 9, sh2);
+  if (L.collar) { P(18, 37, 5, 4, L.collar); P(25, 37, 5, 4, L.collar); P(22, 38, 4, 3, shade(L.collar, 0.85)); }
+  if (L.hoodie) { P(16, 37, 16, 2, sh2); P(20, 39, 1, 6, "#e9e4da"); P(27, 39, 1, 6, "#e9e4da"); }
+  if (L.lanyard) { P(19, 37, 1, 8, "#e9d36a"); P(28, 37, 1, 8, "#e9d36a"); }
+  P(19, 31, 10, 2, sk2);
+
+  // hair details
+  switch (L.style) {
+    case "long": P(12, 11, 10, 3, H); P(26, 11, 10, 3, H); P(23, 6, 2, 5, H2); P(10, 20, 1, 10, H2); P(37, 20, 1, 10, H2); P(15, 6, 4, 1, hi); break;
+    case "buzz": P(13, 8, 22, 1, hi); P(12, 11, 24, 1, H2); break;
+    case "curly":
+      for (const [x, y] of [[12, 5], [17, 3], [24, 2], [31, 4], [9, 10], [37, 10], [15, 9], [28, 8], [21, 7], [34, 6]]) P(x, y, 2, 2, H2);
+      for (const [x, y] of [[14, 4], [26, 3], [33, 8]]) P(x, y, 2, 1, hi);
+      P(11, 11, 26, 3, H); P(16, 13, 4, 1, H2); P(29, 13, 4, 1, H2);
+      break;
+    case "bald": P(18, 12, 6, 1, shade(skin, 1.12)); P(20, 13, 3, 1, shade(skin, 1.12)); break;
+    default:
+      P(12, 11, 6, 3, H); P(17, 11, 4, 2, H); P(27, 11, 9, 3, H); P(31, 14, 4, 2, H);
+      P(13, 6, 3, 2, H2); P(21, 5, 2, 2, H2); P(30, 7, 3, 2, H2); P(10, 13, 2, 3, H2);
+      P(16, 6, 4, 1, hi); P(27, 5, 4, 1, hi);
+  }
+
+  // brows
+  const brow = L.style === "bald" ? H : H2;
+  P(15, 17, 7, 1, brow); P(26, mood === "smirk" ? 16 : 17, 7, 1, brow);
+
+  // glasses, then eyes
+  if (L.glasses) {
+    P(14, 19, 9, 6, fr); P(25, 19, 9, 6, fr); P(15, 20, 7, 4, lens); P(26, 20, 7, 4, lens);
+    P(23, 20, 2, 1, fr); P(12, 20, 2, 1, fr); P(34, 20, 2, 1, fr);
+    P(15, 20, 1, 1, "#ffffff"); P(26, 20, 1, 1, "#ffffff");
+  }
+  if (mood === "happy") { P(17, 21, 3, 1, C.out); P(28, 21, 3, 1, C.out); P(17, 22, 1, 1, C.out); P(30, 22, 1, 1, C.out); }
+  else { P(18, 21, 2, 2, C.out); P(29, 21, 2, 2, C.out); if (!L.glasses) { P(18, 21, 1, 1, "#ffffff"); P(29, 21, 1, 1, "#ffffff"); } }
+  if (L.lashes) { P(17, 20, 1, 1, C.out); P(31, 20, 1, 1, C.out); }
+
+  // nose, cheeks
+  P(23, 24, 2, 3, sk2); P(22, 26, 4, 1, sk2);
+  if (mood === "happy" && L.beard !== "full") { P(14, 26, 3, 1, "#e79a86"); P(31, 26, 3, 1, "#e79a86"); }
+
+  // facial hair and mouth
+  if (L.beard === "full") {
+    for (const [x, y] of [[15, 28], [20, 33], [27, 31], [32, 28], [24, 35]]) P(x, y, 2, 1, H2);
+    P(18, 28, 12, 2, H2);
+  } else if (L.beard === "stubble") {
+    for (let y = 28; y < 35; y += 2) for (let x = 15 + (y % 4); x < 33; x += 3) P(x, y, 1, 1, shade(skin, 0.8));
+  } else if (L.beard === "stache") {
+    P(18, 28, 12, 2, H); P(17, 30, 2, 1, H); P(29, 30, 2, 1, H);
+  }
+  if (mood === "happy") { P(20, 31, 8, 1, lip); P(21, 32, 6, 1, "#b5584a"); }
+  else if (mood === "smirk") { P(22, 31, 5, 1, lip); P(27, 30, 1, 1, lip); }
+  else P(21, 31, 6, 1, lip);
+  if (L.robot) {
+    for (let y = 0; y < 48; y += 2) P(0, y, 48, 1, "rgba(0,0,0,.10)");
+    P(0, 0, 48, 2, "#2b2f3a"); P(0, 46, 48, 2, "#2b2f3a"); P(0, 0, 2, 48, "#2b2f3a"); P(46, 0, 2, 48, "#2b2f3a");
+    P(4, 4, 2, 2, "#e2574c"); P(7, 4, 6, 2, "rgba(247,243,234,.75)");
+  }
+}
+
+/* ---------- Dialogue ---------- */
+const dlgEl = document.getElementById("dlg"), dlgText = document.getElementById("dlgText"),
+      dlgNext = document.getElementById("dlgNext"), dlgPort = document.getElementById("dlgPort"),
+      dlgName = document.getElementById("dlgName"), dlgRole = document.getElementById("dlgRole");
+const dlg = { open: false, lines: [], idx: 0, shown: 0, rendered: -1, onClose: null };
+function openDialog(lines, onClose) {
+  Object.assign(dlg, { open: true, lines, idx: 0, shown: 0, rendered: -1, onClose: onClose || null });
+  dlgEl.hidden = false;
+  showLine();
+}
+function showLine() {
+  const l = dlg.lines[dlg.idx];
+  if (l.who) {
+    dlgPort.hidden = false;
+    dlgName.textContent = l.who.name;
+    dlgRole.textContent = l.who.role;
+    drawPortrait(l.who.look, l.mood || "neutral");
+  } else dlgPort.hidden = true;
+  dlg.shown = 0; dlg.rendered = -1;
+}
+function advance() {
+  const len = dlg.lines[dlg.idx].t.length;
+  if (dlg.shown < len) { dlg.shown = len; return; }
+  dlg.idx++;
+  if (dlg.idx >= dlg.lines.length) {
+    dlg.open = false; dlgEl.hidden = true; talkingTo = null;
+    const cb = dlg.onClose; dlg.onClose = null;
+    if (cb) cb();
+    return;
+  }
+  showLine();
+}
+function updateDialog(dt) {
+  const l = dlg.lines[dlg.idx];
+  dlg.shown = Math.min(l.t.length, dlg.shown + dt * 48);
+  const n = Math.floor(dlg.shown);
+  if (n !== dlg.rendered) {
+    dlg.rendered = n;
+    dlgText.textContent = l.t.slice(0, n);
+    dlgNext.hidden = n < l.t.length;
+  }
+}
+dlgEl.addEventListener("click", () => { if (dlg.open) advance(); });
+
+/* ---------- Conversations ---------- */
+const sb = BYID.sb;
+const say = (who, t, mood) => ({ who, t, mood });
+const SB_INTRO = [
+  say(sb, "There you are! Welcome to the team. I'm S. B., the agile team lead.", "happy"),
+  say(sb, "First days are easy here. No tickets, no deploys. Your only job today is to say hi to everyone.", "neutral"),
+  say(sb, "We're front end, middleware, QA and a product owner. Eleven people besides me.", "neutral"),
+  say(sb, "A few of the devs work remotely. They roll around in robots with their faces on the screen. You get used to it.", "smirk"),
+  say(sb, "Your desk is the one with the red balloon, in the right-hand cluster. Come find me by the sprint board once you've met everybody.", "happy"),
+];
+const TOTAL = TEAM.length;
+const metCount = () => state.met.length;
+function sbLines() {
+  if (state.questDone) {
+    const pool = [
+      [say(sb, "Tomorrow you get your first ticket. Today, you get to enjoy the coffee.", "smirk")],
+      [say(sb, "Stand-up is at 9:15 every morning. Short and sweet, I promise.", "neutral")],
+      [say(sb, "Retro is on Fridays. Bring opinions. And snacks, if you're feeling generous.", "happy")],
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  if (metCount() >= TOTAL) {
+    state.questDone = true;
+    return [
+      say(sb, "You met the whole team! Not bad for day one.", "happy"),
+      say(sb, "Go settle in at your desk. The laptop is still in its box, but the balloon is all yours.", "smirk"),
+    ];
+  }
+  const left = TOTAL - metCount();
+  const extra = state.coffees === 0
+    ? say(sb, "Tip: the coffee machine is in the kitchen, on the east side. M. R. is usually around there.", "neutral")
+    : say(sb, "Look for the yellow marks. Those are the people you haven't met yet.", "neutral");
+  return [say(sb, `How's it going? ${left} ${left === 1 ? "person" : "people"} left to meet.`, "happy"), extra];
+}
+function npcLines(n) {
+  const d = n.def;
+  if (d.id === "sb") return sbLines();
+  if (!state.met.includes(d.id)) {
+    state.met.push(d.id);
+    updateHud();
+    const lines = d.intro.map(l => say(d, l.t, l.mood));
+    if (metCount() >= TOTAL) lines.push({ t: "That's everyone on the team! Head back to S. B. by the sprint board." });
+    return lines;
+  }
+  n.lastPool = ((n.lastPool ?? -1) + 1 + Math.floor(Math.random() * (d.repeat.length - 1))) % d.repeat.length;
+  return d.repeat[n.lastPool].map(l => say(d, l.t, l.mood));
+}
+
+const INFO = {
+  d: ["Someone left their screen unlocked. You resist the urge to change the wallpaper.",
+      "A terminal is running npm install. It has been running since Monday.",
+      "A pull request with 47 comments. All of them say 'nit'.",
+      "A red build badge glows on the screen. Not your problem. Yet."],
+  n: ["Your new desk! A laptop still in its box, a welcome card signed by the whole team, and a red balloon."],
+  c: ["An office chair with a sticky note on it: 'Do not raise. Ever.'"],
+  s: ["The server rack hums. One amber light keeps blinking, and everyone has agreed not to ask about it."],
+  k: ["The counter is covered in crumbs and one abandoned tea bag."],
+  f: ["A yogurt labelled DO NOT EAT. It expired in March."],
+  b: ["The sprint board. Four tickets in To do, three in Doing, one in Done. The one in Done was reopened."],
+  C: ["The wall clock runs two minutes fast. Nobody has ever fixed it."],
+  w: ["Grey November sky. Perfect weather for staying inside and writing code."],
+  P: ["A motivational poster of a mountain. In very small letters it says: SHIP IT."],
+  x: ["The meeting table. Someone booked this room for a 'quick sync' three hours ago."],
+  y: ["The kitchen table. Somebody's lunchbox is open, and it smells like fish."],
+  T: ["The ping pong table, officially listed as a 'collaboration space'."],
+  o: ["A worn sofa. Many production incidents have been solved from right here."],
+  p: ["A plant. It's in better shape than the codebase."],
+  M: ["A welcome mat. Someone has drawn a tiny rubber duck on it in marker."],
+};
+function brewCoffee() {
+  state.coffees++;
+  state.focus = Math.min(100, state.focus + 35);
+  const n = state.coffees;
+  const t = n === 1 ? "You brew your first coffee at the new job. Focus +35."
+    : n < 4 ? `Coffee number ${n}. The machine gurgles approvingly. Focus +35.`
+    : `Coffee number ${n}. Your fingers now type faster than you can think.`;
+  openDialog([{ t }]);
+  updateHud();
+}
+
+/* ---------- Input ---------- */
+const keys = new Set();
+const KEYMAP = { ArrowUp: "u", KeyW: "u", ArrowDown: "d", KeyS: "d", ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r" };
+addEventListener("keydown", e => {
+  if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); e.preventDefault(); }
+  if (["KeyE", "Space", "Enter"].includes(e.code)) { e.preventDefault(); if (!e.repeat) interact(); }
+});
+addEventListener("keyup", e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
+addEventListener("blur", () => keys.clear());
+
+let stickVec = { x: 0, y: 0 }, stickId = null;
+const isTouch = matchMedia("(pointer: coarse)").matches;
+const pad = document.getElementById("pad"), stick = document.getElementById("stick"), knob = document.getElementById("knob");
+if (isTouch) { pad.hidden = false; game.classList.add("touch"); }
+function moveStick(e) {
+  const b = stick.getBoundingClientRect();
+  let dx = e.clientX - (b.left + b.width / 2), dy = e.clientY - (b.top + b.height / 2);
+  const m = Math.hypot(dx, dy), max = b.width / 2 - 18;
+  if (m > max) { dx *= max / m; dy *= max / m; }
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+  const n = Math.hypot(dx, dy);
+  stickVec = n < 10 ? { x: 0, y: 0 } : { x: dx / n, y: dy / n };
+}
+stick.addEventListener("pointerdown", e => { stickId = e.pointerId; stick.setPointerCapture(e.pointerId); moveStick(e); });
+stick.addEventListener("pointermove", e => { if (e.pointerId === stickId) moveStick(e); });
+for (const ev of ["pointerup", "pointercancel"]) stick.addEventListener(ev, e => {
+  if (e.pointerId === stickId) { stickId = null; stickVec = { x: 0, y: 0 }; knob.style.transform = ""; }
+});
+document.getElementById("btnA").addEventListener("pointerdown", e => { e.preventDefault(); interact(); });
+
+/* ---------- Hint ---------- */
+const hint = document.getElementById("hint");
+hint.classList.add("gone");
+hint.innerHTML = (isTouch ? "<b>Stick</b> to walk, <b>A</b> to talk." : "<b>WASD</b> or arrows to walk, <b>E</b> or <b>Space</b> to talk.")
+  + " Meet everyone with a yellow <b>!</b> over their head.";
+function showHint() { hint.classList.remove("gone"); setTimeout(() => hint.classList.add("gone"), 10000); }
+
+/* ---------- Movement & collision ---------- */
+function blockedAt(x, y, self, ghost) {
+  const pts = [[x - 5, y - 5], [x + 4, y - 5], [x - 5, y - 1], [x + 4, y - 1]];
+  for (const [px, py] of pts) if (solid(at(Math.floor(px / T), Math.floor(py / T)))) return true;
+  for (const o of chars) {
+    if (o === self || (ghost && o !== player)) continue;
+    if (Math.abs(o.x - x) < 10 && Math.abs(o.y - y) < 6) return true;
+  }
+  return false;
+}
+function stepAnim(e, dt) {
+  if (e.moving) { e.stepT += dt; if (e.stepT > 0.13) { e.stepT = 0; e.step++; } }
+  else { e.step = 0; e.stepT = 0; }
+}
+const DIRV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+function facingTo(e, o) {
+  const dx = o.x - e.x, dy = o.y - e.y;
+  return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "up" : "down");
+}
+function updatePlayer(dt) {
+  if (cut.phase !== "done") {
+    player.moving = false;
+    if (cut.phase === "fade" && cut.t > 0.7 && !cut.arrived) {
+      const dy = cut.walk - player.y;
+      if (Math.abs(dy) > 0.5) { player.y += Math.sign(dy) * Math.min(Math.abs(dy), 40 * dt); player.moving = true; player.dir = "up"; }
+      else cut.arrived = true;
+    }
+    stepAnim(player, dt);
+    return;
+  }
+  let vx = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0);
+  let vy = (keys.has("d") ? 1 : 0) - (keys.has("u") ? 1 : 0);
+  if (stickVec.x || stickVec.y) { vx = stickVec.x; vy = stickVec.y; }
+  else if (vx && vy) { vx *= Math.SQRT1_2; vy *= Math.SQRT1_2; }
+  player.moving = !!(vx || vy) && !dlg.open;
+  if (player.moving) {
+    player.dir = Math.abs(vx) > Math.abs(vy) ? (vx < 0 ? "left" : "right") : (vy < 0 ? "up" : "down");
+    const sp = 66 * dt;
+    const nx = player.x + vx * sp;
+    if (!blockedAt(nx, player.y, player)) player.x = nx;
+    const ny = player.y + vy * sp;
+    if (!blockedAt(player.x, ny, player)) player.y = ny;
+  }
+  stepAnim(player, dt);
+}
+function updateNpc(n, dt) {
+  if (n === SB && cut.phase !== "done" && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
+  const near = Math.hypot(player.x - n.x, player.y - n.y) < 26;
+  if (talkingTo === n || (near && !n.forced)) {
+    n.moving = false; n.target = null; n.wait = 1.5;
+    n.dir = facingTo(n, player);
+    stepAnim(n, dt); return;
+  }
+  if (dlg.open && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
+  if (n.target) {
+    const [tx, ty] = n.target;
+    const dx = tx - n.x, dy = ty - n.y;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+      n.target = null; n.moving = false; n.forced = false; n.wait = 2 + Math.random() * 4; n.dir = "down";
+    } else {
+      const sp = (n.forced ? 52 : 32) * dt;
+      let nx = n.x, ny = n.y;
+      if (Math.abs(dx) >= 1) { nx += Math.sign(dx) * Math.min(sp, Math.abs(dx)); n.dir = dx < 0 ? "left" : "right"; }
+      else { ny += Math.sign(dy) * Math.min(sp, Math.abs(dy)); n.dir = dy < 0 ? "up" : "down"; }
+      if (blockedAt(nx, ny, n, n.forced)) {
+        n.moving = false;
+        if (!n.forced) { n.target = null; n.wait = 1 + Math.random() * 2; }
+      } else { n.x = nx; n.y = ny; n.moving = true; }
+    }
+  } else {
+    n.moving = false;
+    n.wait -= dt;
+    if (n.wait <= 0) {
+      if (Math.random() < 0.45) {
+        n.dir = ["left", "right", "down", "up"][Math.floor(Math.random() * 4)];
+        n.wait = 1.5 + Math.random() * 3;
+      } else {
+        const [x0, x1, y0, y1] = n.def.area;
+        const tc = x0 + Math.floor(Math.random() * (x1 - x0 + 1)), tr = y0 + Math.floor(Math.random() * (y1 - y0 + 1));
+        n.target = tileFeet(tc, tr);
+      }
+    }
+  }
+  stepAnim(n, dt);
+}
+
+function interact() {
+  if (dlg.open) { advance(); return; }
+  if (cut.phase !== "done") return;
+  const [dx, dy] = DIRV[player.dir];
+  const fx = player.x + dx * 12, fy = player.y - 3 + dy * 12;
+  let best = null, bd = 13;
+  for (const n of npcs) {
+    const d = Math.hypot(fx - n.x, fy - (n.y - 3));
+    if (d < bd) { bd = d; best = n; }
+  }
+  if (best) {
+    talkingTo = best;
+    best.dir = facingTo(best, player);
+    openDialog(npcLines(best), () => updateHud());
+    return;
+  }
+  const ch = at(Math.floor(fx / T), Math.floor(fy / T));
+  if (ch === "m") return brewCoffee();
+  const pool = INFO[ch];
+  if (pool) openDialog([{ t: pool[Math.floor(Math.random() * pool.length)] }]);
+}
+function startIntro() {
+  if (state.introDone) return;
+  talkingTo = SB;
+  if (!state.met.includes("sb")) state.met.push("sb");
+  updateHud();
+  openDialog(SB_INTRO, () => {
+    state.introDone = true;
+    setPhase("done");
+    SB.forced = true;
+    SB.target = tileFeet(9, 3);
+    showHint();
+  });
+}
+
+/* ---------- HUD & time ---------- */
+const hTime = document.getElementById("hTime"), hFocus = document.getElementById("hFocus"),
+      hCoffee = document.getElementById("hCoffee"), hMet = document.getElementById("hMet");
+(() => {
+  const d = new Date();
+  document.getElementById("fadeDay").textContent = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
+  document.getElementById("hDay").textContent = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()] + ". " + d.getDate();
+})();
+function fmtTime(m) {
+  const h24 = Math.floor(m / 60) % 24, mm = m % 60;
+  const h = ((h24 + 11) % 12) + 1;
+  return `${h}:${String(mm).padStart(2, "0")} ${h24 < 12 ? "am" : "pm"}`;
+}
+function updateHud() {
+  hTime.textContent = fmtTime(state.minutes);
+  hFocus.style.width = state.focus + "%";
+  hFocus.style.background = state.focus < 25 ? "#d9634f" : state.focus < 50 ? "#e2b33f" : "";
+  hCoffee.textContent = state.coffees;
+  hMet.textContent = `${metCount()}/${TOTAL}`;
+  hMet.classList.toggle("done", metCount() >= TOTAL);
+}
+function updateTime(dt) {
+  if (dlg.open) return;
+  state.tickAcc += dt;
+  while (state.tickAcc >= 7) {
+    state.tickAcc -= 7;
+    state.minutes += 10;
+    state.focus = Math.max(0, state.focus - 1.5);
+    updateHud();
+  }
+}
+
+/* ---------- Render ---------- */
+function render(time) {
+  const vw = cv.width, vh = cv.height, WW = MW * T, WH = MH * T;
+  let camX = camFX - vw / 2, camY = camFY - 10 - vh / 2;
+  camX = WW <= vw ? (WW - vw) / 2 : Math.max(0, Math.min(WW - vw, camX));
+  camY = WH <= vh ? (WH - vh) / 2 : Math.max(0, Math.min(WH - vh, camY));
+  camX = Math.round(camX); camY = Math.round(camY);
+
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  F(0, 0, vw, vh, C.void);
+  g.setTransform(1, 0, 0, 1, -camX, -camY);
+
+  const c0 = Math.max(0, Math.floor(camX / T) - 2), c1 = Math.min(MW - 1, Math.ceil((camX + vw) / T) + 1);
+  const r0 = Math.max(0, Math.floor(camY / T) - 2), r1 = Math.min(MH - 1, Math.ceil((camY + vh) / T) + 2);
+
+  const list = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+    const ch = at(c, r), px = c * T, py = r * T;
+    if (isWall(ch)) drawWall(c, r, px, py, ch);
+    else {
+      drawFloor(c, r, px, py, ch);
+      if (OBJ.includes(ch)) {
+        if (ch === "s") {
+          if (at(c - 1, r) !== "s" && at(c, r - 1) !== "s") list.push({ k: (r + 2) * T, f: () => drawObject(ch, c, r, px, py, time) });
+        } else list.push({ k: (r + 1) * T - (ch === "c" ? 2 : 0), f: () => drawObject(ch, c, r, px, py, time) });
+      }
+    }
+  }
+  for (const e of chars) list.push({ k: e.y, f: () => drawPerson(e) });
+  list.sort((a, b) => a.k - b.k);
+  for (const it of list) it.f();
+
+  // markers: speech bubble for whoever is in range, yellow "!" over people you haven't met
+  let near = null, nd = 30;
+  for (const n of npcs) { const d = Math.hypot(player.x - n.x, player.y - n.y); if (d < nd) { nd = d; near = n; } }
+  if (cut.phase === "notice") drawNotice(SB.x, SB.y - 30, cut.t);
+  for (const n of npcs) {
+    if (dlg.open || cut.phase !== "done") break;
+    const top = n.y - (n.look.robot ? 39 : 30);
+    if (n === near) drawBubble(n.x, top);
+    else if (!state.met.includes(n.def.id)) drawExclaim(n.x, top);
+  }
+}
+
+/* ---------- Loop ---------- */
+let last = 0;
+function loop(t) {
+  const dt = Math.min(0.05, (t - last) / 1000 || 0);
+  last = t;
+  updateCutscene(dt);
+  updatePlayer(dt);
+  for (const n of npcs) updateNpc(n, dt);
+  const f = camFocus(), k = Math.min(1, dt * 3.2);
+  camFX += (f.x - camFX) * k; camFY += (f.y - camFY) * k;
+  updateTime(dt);
+  if (dlg.open) updateDialog(dt);
+  render(t / 1000);
+  requestAnimationFrame(loop);
+}
+
+window.claude?.hot?.snapshot(() => ({
+  player: { x: player.x, y: player.y, dir: player.dir },
+  npcs: npcs.map(n => ({ x: n.x, y: n.y, dir: n.dir })),
+  state: { ...state },
+}));
+function start(data) {
+  if (data && data.player) Object.assign(player, data.player);
+  if (data && data.npcs) data.npcs.forEach((p, i) => npcs[i] && Object.assign(npcs[i], p));
+  if (data && data.state) Object.assign(state, data.state);
+  updateHud();
+  requestAnimationFrame(t => { last = t; requestAnimationFrame(loop); });
+  if (state.introDone) { setPhase("done"); fadeEl.hidden = true; showHint(); }
+  camFX = player.x; camFY = player.y;
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+
+</body>
+</html>

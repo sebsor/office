@@ -168,7 +168,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 11;
+const VERSION = 13;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -196,9 +196,9 @@ const MAP = [
   row(".dddd....dddn...", "#", "......", "#", ",,,,"),
   row(".cccc....cccc...", "#", "####R#", "#", ",,,,"),
   row("................", "#", "......", "#", ",,,,"),
-  row("................", "#", ".TTT..", "#", ",,,,"),
+  row("...............p", "#", ".TTT..", "#", ",,,,"),
   row("ss..............", "#", ".TTT..", "#", ",,,,"),
-  row("ss.............p", ".", "......", ".", ",,,p"),
+  row("ss..............", ".", "......", ".", ",,,p"),
   row("................", "#", "......", "#", ",,,,"),
   row("p...............", "#", "p....p", "#", "oo,,"),
   row("pp....MMM.......", "#", "......", "#", ",,,,"),
@@ -1322,9 +1322,23 @@ function jumpTo(tx, ty, done) {
 function jumpOnTable(done) {
   jumpTo(TABLE_TOP[0], TABLE_TOP[1], () => { player.onTable = true; player.dir = "down"; floater("Hup!", player.x, player.y - 32); if (done) done(); });
 }
-function jumpOffTable() {
+function jumpOffTable(done) {
   const [x, y] = tileFeet(26, 7);
-  jumpTo(x, y, () => { player.onTable = false; });
+  jumpTo(x, y, () => { player.onTable = false; if (done) done(); });
+}
+function sbShoutsAboutAscending() {
+  // S. B. felt the power level from across the office
+  SB.sawGold = true;
+  SB.shout = 2; fx.shake = 0.5;
+  floater("OI!!", SB.x, SB.y - 40, "#ffb3a8");
+  const far = { ...sb, role: "Shouting from across the office" };
+  const line = state.questDone
+    ? "I asked you to WORK. Not to ASCEND!"
+    : "I asked you to go and TALK to people. Not to ASCEND!";
+  after(0.6, () => openDialog([
+    say(far, line, "angry"),
+    say(far, "...and turn the glow down. Some of us have screens to look at.", "angry"),
+  ]));
 }
 function becomeGolden() {
   // jump on the table, then updateAscend() plays the transformation and calls ascendBurst() at the end
@@ -1358,7 +1372,7 @@ function ascendBurst() {
   after(1.1, () => openDialog([
     { t: "The third coffee hits. You leap onto the kitchen table. You SCREAM. The floor shakes. Your hair turns blonde and starts floating." },
     { t: "You have ascended. You are now a GOLDEN GOD of productivity. Merge conflicts fear you, and your focus will never run out again." },
-  ], jumpOffTable));
+  ], () => jumpOffTable(() => after(0.5, sbShoutsAboutAscending))));
 }
 function eatYogurt() {
   state.yogurtEaten = true;

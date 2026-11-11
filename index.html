@@ -47,6 +47,8 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 .bar{flex:1;height:9px;background:#5c2e14;border:2px solid var(--wood-dark);border-radius:2px;overflow:hidden}
 .bar i{display:block;height:100%;width:100%;background:var(--focus);box-shadow:inset 0 2px 0 rgba(255,255,255,.35);transition:width .3s}
 .quest{color:#2f6239}
+.hud-ver{font-size:12px;color:var(--muted);text-align:right;border-top:1px solid rgba(138,75,34,.3);padding-top:2px;letter-spacing:.04em}
+.fade-ver{margin:0;font-size:13px;color:#b08a64;letter-spacing:.06em}
 .quest.done{color:#4f8f3a}
 
 #hint{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));left:calc(16px + env(safe-area-inset-left,0px));
@@ -125,6 +127,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
     <div class="focus"><span>Focus</span><div class="bar"><i id="hFocus"></i></div></div>
     <div class="hud-row"><span class="muted">Team met</span><span id="hMet" class="quest">0/12</span></div>
     <div class="hud-row"><span class="muted">Coffee</span><span id="hCoffee">0</span></div>
+    <div class="hud-ver" data-version></div>
   </div>
 
   <div id="hint" class="frame"></div>
@@ -132,6 +135,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
   <div id="fade" aria-hidden="true">
     <p class="fade-day" id="fadeDay">Wednesday</p>
     <p class="fade-sub">Day 1 · Your first day on the team</p>
+    <p class="fade-ver" data-version></p>
   </div>
 
   <div id="dlg" hidden>
@@ -150,6 +154,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
       <div class="end-badges" id="endBadges"></div>
       <dl class="end-stats frame" id="endStats"></dl>
       <button id="again" type="button">Play again</button>
+      <p class="fade-ver" data-version></p>
     </div>
   </div>
 
@@ -162,6 +167,9 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 <script>
 (() => {
 "use strict";
+/* Bump this by one for every release */
+const VERSION = 9;
+document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
 /* ---------- Map ----------
@@ -381,7 +389,7 @@ function Spr() {
 const state = { minutes: 9 * 60, tickAcc: 0, focus: 80, coffees: 0, met: [], introDone: false, questDone: false,
   serverPokes: 0, serverDead: false, golden: false, yogurtEaten: false, sick: 0, leaveTries: 0,
   laptopOut: false, whips: 0, fiveDone: false, ended: false };
-const PLAYER_LOOK = { skin: "#f1c29a", hair: "#c9853a", style: "short", beard: "none", shirt: "#2f8f8a", lanyard: true };
+const PLAYER_LOOK = { skin: "#f1c29a", hair: "#2b1f1a", style: "short", beard: "none", shirt: "#2f8f8a", lanyard: true };
 const player = { seated: false, hurt: 0, autoPath: null, x: 8 * T + 8, y: 19 * T - 2, dir: "up", step: 0, stepT: 0, moving: false, look: PLAYER_LOOK };
 
 function tileFeet(c, r) { return [c * T + 8, (r + 1) * T - 2]; }
@@ -397,14 +405,14 @@ SB.crack = 0; SB.shout = 0;
 /* ---------- Effects: timers, particles, flash, screen shake ---------- */
 const timers = [];
 const after = (sec, fn) => timers.push({ t: sec, fn });
-const busy = () => timers.length > 0 || !!player.autoPath || fx.puke > 0 || state.ended
+const busy = () => timers.length > 0 || !!player.autoPath || fx.puke > 0 || fx.ascend > 0 || state.ended
   || whip.phase === "coming" || whip.phase === "escort" || whip.phase === "rush";
 const whip = { phase: null, stuck: 0, next: 0 };
 const floaters = [];
 function floater(text, x, y, color) { floaters.push({ text, x, y, life: 1.3, color: color || "#f7f3ea" }); }
 function walkPlayer(path, done) { player.autoPath = path.map(p => p.slice()); player.autoDone = done || null; }
 const parts = [], decals = [];
-const fx = { flash: 0, flashRGB: "255,255,255", shake: 0, puke: 0, sparkle: 0, smoke: 0 };
+const fx = { flash: 0, flashRGB: "255,255,255", shake: 0, puke: 0, sparkle: 0, smoke: 0, ascend: 0, screams: 0 };
 function burst(n, x, y, o) {
   for (let i = 0; i < n; i++) {
     const a = (o.angle ?? Math.random() * Math.PI * 2) + (Math.random() - 0.5) * (o.spread ?? Math.PI * 2);
@@ -468,10 +476,12 @@ function drawPuddle(d) {
   F(x - 3, y - 2, 2, 1, "#e6e09a"); F(x + 2, y + 1, 2, 2, "#d6d66a"); F(x - 6, y + 1, 2, 1, "#d6d66a");
 }
 
-const GOLD_LOOK = { skin: "#f2c94c", hair: "#fff3b0", style: "short", beard: "none", shirt: "#d4a017", pants: "#a87a12", lanyard: true };
+const GOLD_LOOK = { ...PLAYER_LOOK, hair: "#ffe46b", style: "spiky", eyes: "#1f9aa6" };
 function playerLook() {
-  const base = state.golden ? GOLD_LOOK : PLAYER_LOOK;
-  return state.sick > 0 ? { ...base, skin: state.golden ? "#d3d672" : "#b9d38f" } : base;
+  // during the transformation the hair flickers between dark and blonde
+  const flicker = fx.ascend > 1.1 && Math.floor(fx.ascend * (6 + fx.ascend * 4)) % 2 === 0;
+  const base = state.golden || flicker ? GOLD_LOOK : PLAYER_LOOK;
+  return state.sick > 0 ? { ...base, skin: "#b9d38f" } : base;
 }
 
 /* ---------- Opening cutscene ----------
@@ -824,6 +834,22 @@ function drawPerson(e) {
         else s.r(left ? x + 1 : x - 6, hy + 3, 5, 10, H);
       }
       break;
+    case "spiky": {
+      const tt = performance.now() / 1000;
+      const sway = i => Math.round(Math.sin(tt * 9 + i * 1.4));
+      const lean = dir === "left" ? 2 : dir === "right" ? -2 : 0;
+      const spikes = [[-7, 4], [-4, 7], [-1, 9], [2, 7], [5, 5]];
+      if (dir === "up") s.r(x - 6, hy, 12, 10, H);
+      else s.r(x - 6, hy, 12, 4, H);
+      spikes.forEach(([ox, h], i) => {
+        s.r(x + ox + lean, hy - h + 3, 2, h, H);
+        s.r(x + ox + lean + sway(i), hy - h + 1, 1, 2, H);
+      });
+      if (dir === "down") { s.r(x - 7, hy + 2, 2, 5, H); s.r(x + 5, hy + 2, 2, 5, H); s.d(x - 1, hy + 4, 2, 2, H); }
+      else if (dir !== "up") s.r(left ? x + 1 : x - 6, hy + 2, 5, 6, H);
+      s.d(x - 3 + lean, hy + 1, 4, 1, "#fff6c2");
+      break;
+    }
     default:
       if (dir === "up") s.r(x - 6, hy, 12, 10, H);
       else {
@@ -849,8 +875,9 @@ function drawPerson(e) {
       s.d(x - 5, ey - 1, 4, 3, fr); s.d(x + 1, ey - 1, 4, 3, fr); s.d(x - 1, ey - 1, 2, 1, fr);
       s.d(x - 4, ey, 2, 1, lens); s.d(x + 2, ey, 2, 1, lens);
       s.d(x - 3, ey, 1, 1, C.out); s.d(x + 2, ey, 1, 1, C.out);
-    } else { s.d(x - 3, ey, 1, 2, C.out); s.d(x + 2, ey, 1, 2, C.out); }
+    } else { s.d(x - 3, ey, 1, 2, L.eyes || C.out); s.d(x + 2, ey, 1, 2, L.eyes || C.out); }
     if (L.beard === "stache") s.d(x - 2, y - 16 + b, 4, 1, H);
+    else if (e.scream) { s.d(x - 2, y - 17 + b, 4, 3, "#5a2420"); s.d(x - 1, y - 17 + b, 2, 1, "#f7f3ea"); }
     else if (L.beard === "none" || !L.beard) s.d(x - 1, y - 16 + b, 2, 1, shade(L.skin, 0.82));
   } else if (side) {
     if (L.beard === "full") s.d(left ? x - 5 : x - 1, y - 17 + b, 6, 3, H);
@@ -858,7 +885,7 @@ function drawPerson(e) {
     if (L.glasses) {
       s.d(left ? x - 6 : x + 2, ey - 1, 4, 3, fr); s.d(left ? x - 5 : x + 3, ey, 2, 1, lens);
       s.d(left ? x - 5 : x + 4, ey, 1, 1, C.out);
-    } else s.d(left ? x - 4 : x + 3, ey, 1, 2, C.out);
+    } else s.d(left ? x - 4 : x + 3, ey, 1, 2, L.eyes || C.out);
     if (L.beard === "stache") s.d(left ? x - 5 : x + 2, y - 16 + b, 3, 1, H);
   }
   s.draw(g);
@@ -921,6 +948,16 @@ function drawBubble(x, y) {
   F(x - 6, y - 5, 12, 7, "#f7f3ea");
   F(x - 1, y + 3, 3, 2, C.out); F(x, y + 2, 1, 2, "#f7f3ea");
   F(x - 4, y - 2, 2, 2, C.out); F(x - 1, y - 2, 2, 2, C.out); F(x + 2, y - 2, 2, 2, C.out);
+}
+function drawAura(e, time, power) {
+  const x = Math.round(e.x), y = Math.round(e.y);
+  for (let i = -5; i <= 5; i++) {
+    const h = Math.round((26 - Math.abs(i) * 2.4 + Math.sin(time * 13 + i * 1.9) * 4) * power);
+    g.fillStyle = Math.abs(i) < 3 ? "rgba(255,240,150,.30)" : "rgba(255,206,64,.26)";
+    g.fillRect(x + i * 2 - 1, y - h - 2, 2, h + 2);
+  }
+  g.fillStyle = "rgba(255,250,215,.28)";
+  g.fillRect(x - 6, y - 25, 12, 24);
 }
 function drawWhip() {
   const p = 1 - SB.crack / 0.5;
@@ -1171,7 +1208,7 @@ function sbLines() {
   return [say(sb, `How's it going? ${left} ${left === 1 ? "person" : "people"} left to meet.`, "happy"), extra];
 }
 const GOLD_REACT = [
-  "Why are you... glowing?",
+  "Why are you... glowing? And why is your hair floating?",
   "Is that from the coffee? I need to switch brands.",
   "I have to squint to look at you. Please tone it down before stand-up.",
   "Golden. Nice. Does it come in dark mode?",
@@ -1230,14 +1267,37 @@ function brewCoffee() {
 }
 
 function becomeGolden() {
+  // starts the transformation; updateAscend() plays it out and calls ascendBurst() at the end
+  keys.clear(); player.moving = false;
+  fx.ascend = 0.001; fx.screams = 0;
+}
+const SCREAMS = [[0.55, "AAAH!"], [1.25, "AAAAAAH!!"], [1.95, "AAAAAAAAAAH!!!"]];
+function updateAscend(dt) {
+  if (fx.ascend <= 0) return;
+  fx.ascend += dt;
+  const t = fx.ascend;
+  player.dir = "down"; player.moving = false;
+  player.scream = t > 0.45;
+  if (t > 0.45) {
+    fx.shake = Math.max(fx.shake, 0.15 + (t - 0.45) * 0.45);
+    burst(2, player.x, player.y - 4, { jitter: 18, angle: -Math.PI / 2, spread: 0.35, speed: [35, 80], life: [0.3, 0.7], size: [1, 2], colors: ["#fff3b0", "#ffe46b", "#ffffff"], fade: true });
+    if (Math.random() < dt * 10) burst(1, player.x, player.y, { jitter: 28, angle: -Math.PI / 2, spread: 0.8, speed: [25, 60], gravity: 140, life: [0.4, 0.8], size: [1, 2], colors: ["#8297a6", "#5c6b78", "#a9b6bc"] });
+  }
+  while (fx.screams < SCREAMS.length && t >= SCREAMS[fx.screams][0]) {
+    floater(SCREAMS[fx.screams][1], player.x, player.y - 34 - fx.screams * 3, "#fff3b0");
+    fx.screams++;
+  }
+  if (t >= 2.7) { fx.ascend = 0; player.scream = false; ascendBurst(); }
+}
+function ascendBurst() {
   state.golden = true; state.focus = 100; state.sick = 0;
-  fx.flash = 1; fx.flashRGB = "255,214,90"; fx.shake = 0.35;
+  fx.flash = 1; fx.flashRGB = "255,226,110"; fx.shake = 0.6;
   burst(60, player.x, player.y - 12, { speed: [25, 90], life: [0.6, 1.3], size: [1, 3], colors: ["#fff3b0", "#f2c94c", "#ffffff", "#d4a017"], fade: true });
   burst(20, player.x, player.y - 4, { angle: -Math.PI / 2, spread: 0.7, speed: [40, 80], life: [0.8, 1.4], size: [1, 2], colors: ["#fff3b0", "#ffffff"], fade: true });
   updateHud();
   after(1.1, () => openDialog([
-    { t: "The third coffee hits. Your vision sharpens. Your skin starts to shine. Is that... glitter in your hair?" },
-    { t: "You have become a GOLDEN GOD of productivity. Merge conflicts fear you, and your focus will never run out again." },
+    { t: "The third coffee hits. You turn around. You SCREAM. The floor shakes. Your hair turns blonde and starts floating." },
+    { t: "You have ascended. You are now a GOLDEN GOD of productivity. Merge conflicts fear you, and your focus will never run out again." },
   ]));
 }
 function eatYogurt() {
@@ -1708,12 +1768,7 @@ function render(time) {
   }
   for (const d of decals) drawPuddle(d);
   for (const e of chars) list.push({ k: e.y, f: () => {
-    if (e === player && state.golden) {
-      const a = 0.22 + Math.sin(time * 4) * 0.08;
-      g.fillStyle = `rgba(255,214,90,${a})`;
-      g.fillRect(Math.round(e.x) - 9, Math.round(e.y) - 27, 18, 28);
-      g.fillRect(Math.round(e.x) - 11, Math.round(e.y) - 22, 22, 18);
-    }
+    if (e === player && (state.golden || (fx.ascend > 1.1 && Math.floor(time * 14) % 2 === 0))) drawAura(e, time, fx.ascend > 0 ? 1.4 : 1);
     if (e === player && player.hurt > 0) {
       const ox = Math.random() < 0.5 ? -1 : 1, x0 = e.x;
       e.x += ox; drawPerson(e); e.x = x0;
@@ -1746,6 +1801,7 @@ function loop(t) {
   last = t;
   updateCutscene(dt);
   updateEffects(dt);
+  updateAscend(dt);
   updateWhip(dt);
   updateFloaters(dt);
   if (SB.shout > 0) SB.shout = Math.max(0, SB.shout - dt);

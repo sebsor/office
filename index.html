@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="A Stardew-style pixel game set on an IT development floor.">
+<meta name="description" content="Office Life — a Stardew-style pixel game set on an IT development floor.">
 <meta name="theme-color" content="#1d1820">
-<title>Commit Valley</title>
+<title>Office Life</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Pixelify+Sans:wght@400;600;700&display=swap">
 <style>
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0}
@@ -51,6 +51,42 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 .fade-ver{margin:0;font-size:13px;color:#b08a64;letter-spacing:.06em}
 .quest.done{color:#4f8f3a}
 
+/* start screen, sitcom captions and title card */
+#start{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:#1b1530}
+#city{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
+#playBtn{position:relative}
+#playBtn{display:inline-flex;align-items:center;gap:16px;font:700 34px var(--font-ui);color:var(--parchment);
+  background:#4f8f3a;border:4px solid #2c5420;border-radius:8px;padding:16px 40px 16px 32px;cursor:pointer;
+  box-shadow:0 0 0 4px #8cc46a,0 10px 0 #2c5420,0 16px 30px rgba(0,0,0,.45)}
+#playBtn::before{content:"";width:0;height:0;border-left:22px solid var(--parchment);border-top:14px solid transparent;border-bottom:14px solid transparent}
+#playBtn:hover{background:#5aa043}
+#playBtn:active{transform:translateY(4px);box-shadow:0 0 0 4px #8cc46a,0 6px 0 #2c5420,0 10px 20px rgba(0,0,0,.45)}
+#playBtn:focus-visible{outline:4px solid var(--parchment);outline-offset:6px}
+#game.intro #hud,#game.intro #hint,#game.intro #pad{display:none}
+#caption{position:absolute;left:max(28px,env(safe-area-inset-left,0px));bottom:calc(48px + env(safe-area-inset-bottom,0px));
+  display:grid;gap:2px;transform:rotate(-4deg);transform-origin:left bottom;pointer-events:none;animation:capIn .35s cubic-bezier(.2,1.4,.4,1) both}
+.cap-kicker{font:700 16px var(--font-ui);color:#ffffff;text-transform:uppercase;letter-spacing:.2em;text-shadow:2px 2px 0 #2a1d24}
+.cap-name{font-family:"Bungee","Pixelify Sans",sans-serif;font-size:clamp(30px,7vw,58px);line-height:1;color:#fff3b0;
+  text-shadow:3px 3px 0 #d4572a,6px 6px 0 #2a1d24}
+.cap-role{font:600 clamp(16px,3.4vw,22px) var(--font-ui);color:#ffffff;text-shadow:2px 2px 0 #2a1d24}
+@keyframes capIn{from{transform:translateX(-120%) rotate(-4deg)}to{transform:translateX(0) rotate(-4deg)}}
+#titlecard{position:absolute;inset:0;z-index:15;display:grid;place-content:center;justify-items:center;gap:22px;cursor:pointer;
+  background:radial-gradient(ellipse at center,rgba(29,24,32,.35),rgba(29,24,32,.85));padding-inline:max(16px,env(safe-area-inset-left,0px))}
+.tc-logo{display:grid;justify-items:center;line-height:.9;transform:rotate(-5deg);animation:tcPop .6s cubic-bezier(.2,1.6,.4,1) both}
+.tc-logo span{font-family:"Bungee","Pixelify Sans",sans-serif;font-size:clamp(56px,15vw,150px);color:#fff3b0;
+  text-shadow:4px 4px 0 #e2408f,8px 8px 0 #2fb8c9,12px 12px 0 #2a1d24}
+.tc-logo span+span{color:#ffd24a;margin-left:.6em}
+.tc-click{margin:0;font:700 clamp(18px,4vw,26px) var(--font-ui);color:#ffffff;text-shadow:2px 2px 0 #2a1d24;animation:blink 1.1s steps(2) infinite}
+.tc-credit{margin:0;font:600 clamp(14px,3vw,18px) var(--font-ui);color:#f8e1ae;text-shadow:2px 2px 0 #2a1d24;text-align:center}
+@keyframes tcPop{from{transform:scale(.2) rotate(-25deg);opacity:0}to{transform:scale(1) rotate(-5deg);opacity:1}}
+@keyframes blink{50%{opacity:.25}}
+#skip{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));top:calc(18px + env(safe-area-inset-top,0px));z-index:16;
+  font:700 18px var(--font-ui);color:var(--ink);background:linear-gradient(var(--parchment),var(--parchment-2));
+  border:3px solid var(--wood);border-radius:4px;padding:8px 16px;cursor:pointer;
+  box-shadow:0 0 0 3px var(--wood-light),0 0 0 6px var(--wood-dark),0 6px 0 6px rgba(0,0,0,.35)}
+#skip:hover{filter:brightness(1.06)}
+#skip:focus-visible{outline:2px solid var(--parchment);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){#caption,.tc-logo,.tc-click{animation:none}}
 #hint{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));left:calc(16px + env(safe-area-inset-left,0px));
   padding:6px 12px;font-size:15px;max-width:min(330px,calc(100% - 230px));line-height:1.3;transition:opacity .6s}
 #hint b{font-weight:700}
@@ -121,7 +157,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 </style>
 </head>
 <body>
-<div id="game">
+<div id="game" class="intro">
   <canvas id="view"></canvas>
 
   <div id="hud" class="frame" aria-live="off">
@@ -134,6 +170,11 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
   </div>
 
   <div id="hint" class="frame"></div>
+
+  <div id="caption" hidden><span class="cap-kicker" id="capKicker"></span><span class="cap-name" id="capName"></span><span class="cap-role" id="capRole"></span></div>
+  <div id="titlecard" hidden><div class="tc-logo"><span>Office</span><span>Life</span></div><p class="tc-click">Click to start your first day</p><p class="tc-credit">Created by Sebastian (with a looooooooooooooot of AI)</p></div>
+  <button id="skip" type="button" hidden>Skip to title »</button>
+  <div id="start"><canvas id="city" width="320" height="180" aria-hidden="true"></canvas><button id="playBtn" type="button" aria-label="Play">Play</button></div>
 
   <div id="fade" aria-hidden="true">
     <p class="fade-day" id="fadeDay">Wednesday</p>
@@ -176,8 +217,8 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 22;
-document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
+const VERSION = 26;
+document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Office Life v" + VERSION; });
 const T = 16;
 
 /* ---------- Map ----------
@@ -507,12 +548,12 @@ function playerLook() {
 /* ---------- Opening cutscene ----------
    fade: white screen fades out while you walk in from the door
    look: a short beat   notice: S. B. spots you, "!" pops   approach: he walks over   talk: welcome dialogue */
-const cut = { phase: "fade", t: 0, walk: tileFeet(8, 16)[1], arrived: false };
+const cut = { phase: "intro", t: 0, walk: tileFeet(8, 16)[1], arrived: false };
 const fadeEl = document.getElementById("fade");
 let camFX = player.x, camFY = player.y, camClamp = 1;
 function setPhase(p) { cut.phase = p; cut.t = 0; }
 function updateCutscene(dt) {
-  if (cut.phase === "done") return;
+  if (cut.phase === "done" || cut.phase === "intro") return;
   cut.t += dt;
   if (cut.phase === "fade") {
     fadeEl.style.opacity = Math.max(0, Math.min(1, 1 - (cut.t - 1.1) / 1.4));
@@ -1020,6 +1061,7 @@ function drawRobot(e) {
   F(x, y - 32, 1, 4, C.out);
   F(x - 1, y - 34, 3, 2, C.out);
   F(x, y - 33, 1, 1, Math.floor(performance.now() / 450) % 2 ? "#e2574c" : "#7a2a24");
+  if (state.retro) return drawStickyFace(L, x, y, dir);
   if (side) {
     F(x - 2, y - 29, 5, 14, C.out);
     F(x - 1, y - 28, 3, 12, "#2b2f3a");
@@ -1048,7 +1090,6 @@ function drawRobot(e) {
   F(sx + 4, sy + 5, 1, 1, C.out); F(sx + 7, sy + 5, 1, 1, C.out);
   if (L.beard === "stubble" || L.beard === "full") F(sx + 4, sy + 7, 4, 1, shade(sk, 0.82));
   else F(sx + 5, sy + 7, 2, 1, shade(sk, 0.78));
-  if (state.retro) for (let i = 0; i < 6; i++) F(sx + Math.floor(Math.random() * 12), sy + Math.floor(Math.random() * 10), 1, 1, "rgba(255,255,255,.45)");
   // scanline shimmer
   const scan = Math.floor(performance.now() / 120) % 10;
   F(sx, sy + scan, 12, 1, "rgba(255,255,255,.12)");
@@ -1099,6 +1140,30 @@ function drawBody(n) {
   const t = performance.now() / 300 + n.x;
   F(x - 7 + Math.round(Math.cos(t) * 4), y - 10 + Math.round(Math.sin(t) * 2), 1, 1, "#fff3b0");
   F(x - 7 + Math.round(Math.cos(t + 3.1) * 4), y - 10 + Math.round(Math.sin(t + 3.1) * 2), 1, 1, "#fff3b0");
+}
+function drawStickyFace(L, x, y, dir) {
+  // a yellow sticky note taped to the pole, with a marker doodle of the person's face
+  const note = "#f6e27a", ink = "#26283a";
+  if (dir === "left" || dir === "right") {
+    F(x - 1, y - 28, 3, 13, C.out); F(x, y - 27, 1, 11, note);
+    return;
+  }
+  F(x - 7, y - 29, 14, 13, C.out);
+  F(x - 6, y - 28, 12, 11, dir === "up" ? "#efd96e" : note);
+  F(x + 3, y - 20, 3, 3, "#d9c25a");
+  F(x - 3, y - 30, 6, 3, "rgba(235,242,245,.85)");
+  if (dir === "up") return;
+  const sx = x - 6, sy = y - 28;
+  // hair scribble
+  if (L.style === "curly") { F(sx + 2, sy + 2, 1, 1, ink); F(sx + 4, sy + 1, 1, 1, ink); F(sx + 6, sy + 2, 1, 1, ink); F(sx + 8, sy + 1, 1, 1, ink); F(sx + 9, sy + 3, 1, 1, ink); }
+  else if (L.style === "buzz") F(sx + 3, sy + 2, 6, 1, ink);
+  else if (L.style !== "bald") { F(sx + 3, sy + 1, 6, 1, ink); F(sx + 2, sy + 2, 1, 2, ink); F(sx + 9, sy + 2, 1, 2, ink); }
+  // face outline
+  F(sx + 3, sy + 3, 6, 1, ink); F(sx + 3, sy + 9, 6, 1, ink); F(sx + 2, sy + 4, 1, 5, ink); F(sx + 9, sy + 4, 1, 5, ink);
+  if (L.glasses) { F(sx + 3, sy + 5, 2, 2, ink); F(sx + 7, sy + 5, 2, 2, ink); F(sx + 5, sy + 5, 2, 1, ink); }
+  else { F(sx + 4, sy + 5, 1, 1, ink); F(sx + 7, sy + 5, 1, 1, ink); }
+  F(sx + 4, sy + 8, 4, 1, ink); F(sx + 3, sy + 7, 1, 1, ink); F(sx + 8, sy + 7, 1, 1, ink);
+  if (L.beard === "stubble" || L.beard === "full") { F(sx + 4, sy + 9, 1, 1, ink); F(sx + 7, sy + 9, 1, 1, ink); }
 }
 function drawBubble(x, y) {
   x = Math.round(x); y = Math.round(y) - (Math.floor(performance.now() / 400) % 2);
@@ -1173,6 +1238,33 @@ function drawExclaim(x, y) {
 /* ---------- Portrait (48x48, scaled up in CSS) ---------- */
 const pcv = document.getElementById("portrait");
 const pg = pcv.getContext("2d");
+function drawStickyPortrait(L, mood) {
+  const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  const ink = "#26283a", note = "#f6e27a";
+  P(0, 0, 48, 48, "#9aa3ad");
+  P(5, 5, 39, 39, "rgba(0,0,0,.18)");
+  P(4, 4, 38, 38, note);
+  P(4, 4, 38, 3, "#efd96e");
+  P(34, 34, 8, 8, "#d9c25a"); P(34, 34, 8, 1, "#c9b24e");
+  P(15, 1, 18, 6, "rgba(235,242,245,.85)");
+  const line = (x, y, w, h) => P(x, y, w, h, ink);
+  // hair
+  if (L.style === "curly") for (const [x, y] of [[13, 11], [16, 9], [20, 8], [24, 8], [28, 9], [31, 11], [34, 14]]) line(x, y, 3, 2);
+  else if (L.style === "buzz") line(15, 12, 18, 2);
+  else if (L.style !== "bald") { line(14, 10, 20, 2); line(12, 12, 2, 6); line(34, 12, 2, 6); line(17, 12, 6, 2); }
+  // head outline
+  line(15, 14, 18, 2); line(15, 34, 18, 2); line(13, 16, 2, 18); line(33, 16, 2, 18);
+  // eyes, glasses
+  if (L.glasses) { line(17, 20, 6, 1); line(17, 24, 6, 1); line(17, 20, 1, 5); line(22, 20, 1, 5); line(26, 20, 6, 1); line(26, 24, 6, 1); line(26, 20, 1, 5); line(31, 20, 1, 5); line(23, 22, 3, 1); }
+  if (mood === "happy") { line(18, 23, 3, 1); line(27, 23, 3, 1); }
+  else { line(19, 21, 2, 3); line(28, 21, 2, 3); }
+  // smile
+  if (mood === "neutral") line(20, 30, 8, 1);
+  else { line(19, 29, 1, 1); line(20, 30, 8, 1); line(28, 29, 1, 1); }
+  if (L.beard === "stubble" || L.beard === "full") for (const [x, y] of [[17, 31], [19, 33], [27, 33], [30, 31], [23, 33]]) line(x, y, 1, 1);
+  // a hurried signature line
+  line(9, 39, 10, 1); line(18, 38, 3, 1);
+}
 function drawCatPortrait(mood) {
   const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
   const cream = "#f3ead8", cream2 = "#e2d4b8", seal = "#8a6a52", seal2 = "#6b4f3c";
@@ -1199,6 +1291,7 @@ function drawPortrait(L, mood) {
   pg.clearRect(0, 0, 48, 48);
   const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
   if (L.cat) return drawCatPortrait(mood);
+  if (L.robot && L.retro) return drawStickyPortrait(L, mood);
   if (L.robot) { P(0, 0, 48, 48, "#24485c"); P(0, 0, 48, 12, "#2a5268"); }
   if (L.aura) {
     P(0, 0, 48, 48, "#f6c843");
@@ -1996,7 +2089,7 @@ const RETRO_LINES = [
   "My pager went off again. It's my mum, asking if I've eaten.",
   "Version control? We email zip files to each other. Works great.",
 ];
-const ROBOT_RETRO = "Sorry, you're br-br-breaking up... my modem is doing the screaming thing again.";
+const ROBOT_RETRO = "Video calls haven't been invented yet, so I drew my face on a sticky note. Close enough.";
 let hDayModern = "";
 const fade = { on: false, t: 0, mid: null, done: null, midDone: false };
 function fadeThrough(title, sub, mid, done) {
@@ -2695,9 +2788,11 @@ function updateTime(dt) {
 /* ---------- Render ---------- */
 function render(time) {
   const vw = cv.width, vh = cv.height, WW = MW * T, WH = MH * T;
-  let camX = camFX - vw / 2, camY = camFY - 10 - vh / 2;
-  const cx = WW <= vw ? (WW - vw) / 2 : Math.max(0, Math.min(WW - vw, camX));
-  const cy = WH <= vh ? (WH - vh) / 2 : Math.max(0, Math.min(WH - vh, camY));
+  const zoom = intro.on ? intro.zoom : 1;
+  const ww = vw / zoom, wh = vh / zoom;
+  let camX = camFX - ww / 2, camY = camFY - 10 - wh / 2;
+  const cx = WW <= ww ? (WW - ww) / 2 : Math.max(0, Math.min(WW - ww, camX));
+  const cy = WH <= wh ? (WH - wh) / 2 : Math.max(0, Math.min(WH - wh, camY));
   camX = camX + (cx - camX) * camClamp;
   camY = cy;
   if (fx.shake > 0) { const m = Math.min(1, fx.shake) * 3; camX += (Math.random() - 0.5) * m * 2; camY += (Math.random() - 0.5) * m * 2; }
@@ -2705,10 +2800,11 @@ function render(time) {
 
   g.setTransform(1, 0, 0, 1, 0, 0);
   F(0, 0, vw, vh, C.void);
-  g.setTransform(1, 0, 0, 1, -camX, -camY);
+  const world = () => g.setTransform(zoom, 0, 0, zoom, -camX * zoom, -camY * zoom);
+  world();
 
-  const c0 = Math.max(0, Math.floor(camX / T) - 2), c1 = Math.min(MW - 1, Math.ceil((camX + vw) / T) + 1);
-  const r0 = Math.max(0, Math.floor(camY / T) - 2), r1 = Math.min(MH - 1, Math.ceil((camY + vh) / T) + 2);
+  const c0 = Math.max(0, Math.floor(camX / T) - 2), c1 = Math.min(MW - 1, Math.ceil((camX + ww) / T) + 1);
+  const r0 = Math.max(0, Math.floor(camY / T) - 2), r1 = Math.min(MH - 1, Math.ceil((camY + wh) / T) + 2);
 
   const list = [];
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
@@ -2757,7 +2853,8 @@ function render(time) {
   let near = null, nd = 30;
   for (const n of npcs) { if (n.gone) continue; const d = Math.hypot(player.x - n.x, player.y - n.y); if (d < nd) { nd = d; near = n; } }
   if (cut.phase === "notice") drawNotice(SB.x, SB.y - 30, cut.t);
-  if (fx.flash > 0) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(${fx.flashRGB},${fx.flash})`; g.fillRect(0, 0, vw, vh); g.setTransform(1, 0, 0, 1, -camX, -camY); }
+  if (fx.flash > 0) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(${fx.flashRGB},${fx.flash})`; g.fillRect(0, 0, vw, vh); world(); }
+  if (intro.on && intro.frozen) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(${intro.tint},.28)`; g.fillRect(0, 0, vw, vh); world(); }
   for (const n of npcs) {
     if (dlg.open || cut.phase !== "done" || state.vamp) break;
     const top = n.y - (n.look.robot ? 39 : 30);
@@ -2766,11 +2863,354 @@ function render(time) {
   }
 }
 
+/* ---------- Start screen: city skyline at dusk (the office is the brick one with the sign) ---------- */
+const cityCv = document.getElementById("city"), cg = cityCv.getContext("2d");
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const CITY = (() => {
+  const rnd = mulberry(1999), GROUND = 158;
+  const OFFICE = { x: 132, w: 58, h: 112, office: true };
+  const shades = ["#2b2442", "#332b4d", "#3a3156", "#2f2a48"];
+  const buildings = [];
+  let x = -6;
+  while (x < 330) {
+    const w = 14 + Math.floor(rnd() * 24), h = 34 + Math.floor(rnd() * 78);
+    if (x + w > OFFICE.x - 3 && x < OFFICE.x + OFFICE.w + 3) { x = OFFICE.x + OFFICE.w + 3; continue; }
+    buildings.push({ x, w, h, col: shades[Math.floor(rnd() * shades.length)], seed: Math.floor(rnd() * 1e6) });
+    x += w + (rnd() < 0.35 ? 3 : 0);
+  }
+  buildings.push(OFFICE);
+  const far = [];
+  for (let fx = 0; fx < 320; fx += 6 + Math.floor(rnd() * 8)) far.push({ x: fx, w: 8 + Math.floor(rnd() * 10), h: 50 + Math.floor(rnd() * 50) });
+  const stars = Array.from({ length: 46 }, () => ({ x: Math.floor(rnd() * 320), y: Math.floor(rnd() * 70), p: rnd() * 6 }));
+  return { GROUND, buildings, far, stars };
+})();
+function drawCity(time) {
+  const C2 = (x, y, w, h, c) => { cg.fillStyle = c; cg.fillRect(x, y, w, h); };
+  const sky = cg.createLinearGradient(0, 0, 0, 160);
+  sky.addColorStop(0, "#141026"); sky.addColorStop(0.45, "#3a2850"); sky.addColorStop(0.8, "#a4506a"); sky.addColorStop(1, "#f0a066");
+  cg.fillStyle = sky; cg.fillRect(0, 0, 320, 180);
+  for (const st of CITY.stars) if (Math.sin(time * 2 + st.p) > -0.3) C2(st.x, st.y, 1, 1, "rgba(255,246,220,.85)");
+  // moon
+  cg.fillStyle = "#f4ecd0"; for (let dy = -8; dy <= 8; dy++) { const w = Math.floor(Math.sqrt(64 - dy * dy)); cg.fillRect(268 - w, 26 + dy, w * 2 + 1, 1); }
+  C2(264, 22, 3, 2, "#ddd2b0"); C2(271, 29, 2, 2, "#ddd2b0");
+  // plane crossing
+  const px = ((time * 14) % 400) - 40;
+  C2(Math.floor(px), 36, 4, 1, "#6a5a7a");
+  if (Math.floor(time * 2) % 2) C2(Math.floor(px) + 4, 36, 1, 1, "#ff6b6b");
+  // far skyline
+  for (const f of CITY.far) C2(f.x, CITY.GROUND - f.h, f.w, f.h, "#241d3a");
+  // buildings
+  const G = CITY.GROUND;
+  for (const b of CITY.buildings) {
+    const top = G - b.h;
+    if (b.office) {
+      C2(b.x - 1, top - 1, b.w + 2, b.h + 1, "#1a1424");
+      C2(b.x, top, b.w, b.h, "#7a4a3c");
+      for (let yy = top + 3; yy < G; yy += 6) C2(b.x, yy, b.w, 1, "#6a3f33");
+      // lit office floors
+      for (let wy = top + 10; wy < G - 12; wy += 9) for (let wx = b.x + 4; wx < b.x + b.w - 5; wx += 7) {
+        const lit = ((wx * 7 + wy * 3) % 5) !== 0;
+        C2(wx, wy, 5, 5, lit ? "#cfe8ff" : "#3a2e3a");
+        if (lit) C2(wx, wy, 5, 1, "#ffffff");
+      }
+      // MAUI the cat sitting in one window
+      const cx = b.x + 4 + 7 * 3, cy = top + 10 + 9 * 5;
+      C2(cx + 1, cy + 2, 3, 3, "#2a2030"); C2(cx + 1, cy + 1, 1, 1, "#2a2030"); C2(cx + 3, cy + 1, 1, 1, "#2a2030");
+      // entrance
+      C2(b.x + b.w / 2 - 6, G - 10, 12, 10, "#f6d68a"); C2(b.x + b.w / 2 - 1, G - 10, 2, 10, "#7a4a3c");
+      // neon rooftop sign
+      const on = Math.sin(time * 3) > -0.85;
+      C2(b.x + 6, top - 12, b.w - 12, 10, "#1a1424");
+      cg.font = "8px 'Pixelify Sans', monospace"; cg.textAlign = "center"; cg.textBaseline = "middle";
+      cg.fillStyle = on ? "#ff9ad0" : "#6a3a5a";
+      if (on) { cg.shadowColor = "#ff5fb0"; cg.shadowBlur = 6; }
+      cg.fillText("OFFICE", b.x + b.w / 2, top - 7);
+      cg.shadowBlur = 0;
+      C2(b.x + 10, top - 2, 1, 2, "#1a1424"); C2(b.x + b.w - 11, top - 2, 1, 2, "#1a1424");
+      continue;
+    }
+    C2(b.x, top, b.w, b.h, b.col);
+    C2(b.x, top, b.w, 1, "#4a4068");
+    const rnd = mulberry(b.seed);
+    for (let wy = top + 4; wy < G - 4; wy += 5) for (let wx = b.x + 2; wx < b.x + b.w - 2; wx += 4) {
+      const r = rnd();
+      let lit = r < 0.42;
+      if (lit && Math.floor(time / 2 + r * 50) % 23 === 0) lit = false;
+      C2(wx, wy, 2, 2, lit ? (r < 0.2 ? "#f6d68a" : "#ffe3b0") : "#463c64");
+    }
+    if (b.h > 95) { C2(b.x + b.w / 2, top - 6, 1, 6, "#2b2442"); if (Math.floor(time * 1.5) % 2) C2(b.x + b.w / 2, top - 7, 1, 1, "#ff6b6b"); }
+  }
+  // street, sidewalk and lamps
+  C2(0, G, 320, 22, "#2a2530");
+  C2(0, G, 320, 3, "#4a4258");
+  for (let lx = 10; lx < 320; lx += 34) C2(lx, G + 12, 12, 1, "#6a6278");
+  for (let lx = 22; lx < 320; lx += 52) {
+    C2(lx, G - 14, 1, 14, "#1a1424"); C2(lx - 2, G - 15, 5, 2, "#1a1424");
+    cg.fillStyle = "rgba(255,214,140,.18)"; cg.fillRect(lx - 6, G - 13, 13, 16);
+    C2(lx - 1, G - 13, 3, 1, "#ffd68c");
+  }
+}
+
+/* ---------- Sitcom opening: theme tune ---------- */
+let actx = null, music = null;
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+function tone(freq, at, dur, type, vol, dest) {
+  const o = actx.createOscillator(), gn = actx.createGain();
+  o.type = type; o.frequency.value = freq;
+  gn.gain.setValueAtTime(vol, at); gn.gain.exponentialRampToValueAtTime(0.0008, at + dur);
+  o.connect(gn); gn.connect(dest); o.start(at); o.stop(at + dur + 0.03);
+}
+function hat(at, dest) {
+  const len = Math.floor(actx.sampleRate * 0.04), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = actx.createBufferSource(), gn = actx.createGain();
+  src.buffer = buf; gn.gain.value = 0.12; src.connect(gn); gn.connect(dest); src.start(at);
+}
+// An original, upbeat little theme in C major (eighth notes; null = rest)
+const LEAD = [72, 72, 76, 79, null, 77, 76, 74,  72, null, 69, 72, 74, null, 76, null,
+              77, 77, 76, 74, null, 72, 74, 76,  79, null, 76, null, 72, null, null, null,
+              72, 72, 76, 79, null, 81, 79, 77,  76, null, 74, 76, 77, null, 79, null,
+              81, 79, 77, 76, 74, null, 76, 74,  72, 74, 76, 79, 84, null, null, null];
+const BASS_ROOTS = [48, 45, 41, 43, 48, 45, 41, 43];
+function startMusic() {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) { actx = null; return; }
+  const out = actx.createGain(); out.gain.value = 0.16; out.connect(actx.destination);
+  const step = 60 / 152 / 2;
+  music = { out, step, i: 0, next: actx.currentTime + 0.08, timer: 0 };
+  music.timer = setInterval(() => {
+    while (music && music.next < actx.currentTime + 0.25) {
+      const i = music.i % LEAD.length, at = music.next;
+      if (LEAD[i] !== null) tone(mtof(LEAD[i]), at, step * 0.9, "square", 0.22, out);
+      const root = BASS_ROOTS[Math.floor(i / 8) % BASS_ROOTS.length];
+      tone(mtof(i % 2 ? root + 12 : root), at, step * 0.8, "triangle", 0.35, out);
+      if (i % 2 === 1) hat(at, out);
+      music.i++; music.next += step;
+    }
+  }, 40);
+}
+function stingMusic() {
+  if (!actx || !music) return;
+  const t0 = actx.currentTime + 0.05;
+  [72, 76, 79, 84].forEach((m, k) => tone(mtof(m), t0 + k * 0.09, 0.5, "square", 0.25, music.out));
+}
+function stopMusic() {
+  if (!music) return;
+  const m = music; music = null;
+  clearInterval(m.timer);
+  try { m.out.gain.setTargetAtTime(0, actx.currentTime, 0.25); } catch (e) {}
+}
+
+/* ---------- Sitcom opening: the sequence ---------- */
+const intro = { on: false, i: -1, t: 0, ft: 0, frozen: false, zoom: 2.3, tint: "255,214,90", focus: { x: 0, y: 0 }, title: false };
+const startEl = document.getElementById("start"), titleEl = document.getElementById("titlecard"), skipBtn = document.getElementById("skip");
+const capEl = document.getElementById("caption");
+const P_ = id => npcs.find(n => n.def.id === id);
+const TINTS = ["255,214,90", "90,200,255", "255,120,180", "140,255,160", "200,150,255", "255,160,90"];
+function put(e, c, r, dir) { [e.x, e.y] = tileFeet(c, r); e.dir = dir || "down"; e.moving = false; e.lift = 0; }
+function walkTo(e, c, r, sp, dt) {
+  const [tx, ty] = tileFeet(c, r), dx = tx - e.x, dy = ty - e.y;
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) { e.x = tx; e.y = ty; e.moving = false; stepAnim(e, dt); return true; }
+  if (Math.abs(dx) >= 1) { e.x += Math.sign(dx) * Math.min(sp * dt, Math.abs(dx)); e.dir = dx < 0 ? "left" : "right"; }
+  else { e.y += Math.sign(dy) * Math.min(sp * dt, Math.abs(dy)); e.dir = dy < 0 ? "up" : "down"; }
+  e.moving = true; stepAnim(e, dt); return false;
+}
+function bounce(e, t, from, dur, h) {
+  const k = (t - from) / dur;
+  e.lift = k > 0 && k < 1 ? Math.sin(k * Math.PI) * h : 0;
+}
+function once(seg, key, fn) { if (!seg[key]) { seg[key] = true; fn(); } }
+const focusOn = (e, dy = 0) => () => ({ x: e.x, y: e.y - 8 + dy });
+function buildIntro() {
+  const SBn = SB, PSn = P_("ps"), JOJ = P_("jjo"), MR = P_("mr"), SDn = P_("sd");
+  const AA = P_("aa"), EA = P_("ea"), JG = P_("jg"), SK = P_("sk"), IR = P_("ir"), PW = P_("pw"), AW = P_("aw");
+  return [
+    { cap: ["", "S. B.", "as The Agile Team Lead"], dur: 2.4, focus: focusOn(SBn),
+      setup() { put(SBn, 9, 3, "up"); },
+      update(t, dt, sg) {
+        if (t > 0.4) once(sg, "a", () => { floater("SHIP IT!", SBn.x, SBn.y - 34, "#ffd66b"); SBn.shout = 1.2; });
+        if (t > 1.3) { SBn.dir = "down"; bounce(SBn, t, 1.4, 0.35, 5); }
+        if (SBn.shout > 0) SBn.shout = Math.max(0, SBn.shout - dt);
+      } },
+    { cap: ["", "P. S.", "as The Product Owner"], dur: 2.6, focus: focusOn(PSn),
+      setup() { put(PSn, 21, 8, "down"); PSn.hop = 0; PSn.caught = 0; },
+      update(t, dt, sg) {
+        if (t > 1.3) once(sg, "c", () => { PSn.hop = 0.45; PSn.caught = 1.6; });
+        if (PSn.hop > 0) { PSn.hop = Math.max(0, PSn.hop - dt); PSn.lift = Math.sin((1 - PSn.hop / 0.45) * Math.PI) * 7; } else PSn.lift = 0;
+        if (PSn.caught > 0) PSn.caught = Math.max(0, PSn.caught - dt);
+      } },
+    { cap: ["", "The Front End Team", "A. A. · E. A. · J. G. · S. K. · I. R. · P. W. · A. W."], dur: 3.0, zoom: 1.7,
+      focus: () => ({ x: 8 * T + 8, y: 8 * T + 4 }),
+      setup() {
+        put(SK, 3, 6, "down"); put(EA, 5, 6, "down"); put(AA, 8, 6, "down"); put(JG, 11, 6, "down");
+        put(IR, 6, 9, "right"); put(PW, 11, 9, "left"); put(AW, 13, 9, "left");
+      },
+      update(t, dt, sg) {
+        if (t > 0.3) once(sg, "aa", () => floater("Small PRs, please!", AA.x, AA.y - 34, "#ffffff"));
+        if (t > 0.8) once(sg, "ea", () => { floater("It works!", EA.x, EA.y - 30, "#9fe0a8"); burst(10, EA.x, EA.y - 24, { speed: [20, 50], life: [0.4, 0.9], size: [1, 2], colors: ["#fff3b0", "#ffffff"], fade: true }); });
+        bounce(EA, t, 0.9, 0.4, 6);
+        if (t > 1.3) once(sg, "jg", () => floater("?!", JG.x, JG.y - 30, "#ffd66b"));
+        bounce(JG, t, 1.3, 0.35, 6);
+        if (t > 1.7) once(sg, "sk", () => floater("Mobile first!", SK.x, SK.y - 30, "#ffffff"));
+        const a = walkTo(IR, 8, 9, 34, dt), b = walkTo(PW, 9, 9, 34, dt);
+        if (a && b) once(sg, "bump", () => {
+          fx.shake = 0.2;
+          burst(10, 9 * T, 9 * T - 8, { speed: [20, 60], gravity: 90, life: [0.3, 0.6], size: [1, 1], colors: ["#f2c46d", "#ffffff"] });
+          floater("You're on mute!", PW.x + 4, PW.y - 42, "#9fd8ff");
+        });
+        if (t > 2.0) once(sg, "aw", () => floater("Lag...", AW.x, AW.y - 40, "#cfd5dc"));
+      } },
+    { cap: ["", "J. O. J.", "as The Middleware Developer"], dur: 2.3, focus: focusOn(JOJ),
+      setup() { put(JOJ, 3, 14, "left"); },
+      update(t, dt, sg) {
+        bounce(JOJ, t, 0.4, 0.25, 2); if (t > 0.8) bounce(JOJ, t, 0.8, 0.25, 2);
+        if (t > 0.5) once(sg, "a", () => floater("Shh... it's fine.", JOJ.x, JOJ.y - 34, "#ffffff"));
+        if (t > 1.5) JOJ.dir = "down";
+      } },
+    { cap: ["", "M. R. & S. D.", "as The QA Team"], dur: 2.6, zoom: 2.0, focus: () => ({ x: 20 * T + 8, y: 14 * T + 4 }),
+      setup() { put(SDn, 19, 15, "up"); put(MR, 22, 15, "up"); },
+      update(t, dt, sg) {
+        const bx = 19 * T + 4 + Math.abs(((t * 1.6) % 2) - 1) * 40, by = 13 * T + 10 - Math.abs(Math.sin(t * 9)) * 6;
+        parts.push({ x: bx, y: by, vx: 0, vy: 0, g: 0, life: 0.02, max: 0.02, size: 2, color: "#ffffff", fade: false });
+        if (t > 0.7) once(sg, "mr", () => floater("Found a bug!", MR.x, MR.y - 34, "#ffd66b"));
+        if (t > 1.4) once(sg, "sd", () => floater("Edge case!", SDn.x, SDn.y - 34, "#ffffff"));
+        bounce(MR, t, 0.8, 0.35, 5); bounce(SDn, t, 1.5, 0.35, 5);
+      } },
+    { cap: ["and", "MAUI", "as The Team Mascot"], dur: 2.4, focus: () => ({ x: cat.x, y: cat.y - 4 }),
+      setup() { cat.x = 11 * T + 8; cat.y = 10 * T - 3; cat.state = "walk"; cat.path = null; cat.dir = "right"; },
+      update(t, dt, sg) {
+        if (t < 1.2) { cat.x += 22 * dt; cat.dir = "right"; cat.moving = true; stepAnim(cat, dt); }
+        else { cat.moving = false; cat.state = "sit"; cat.dir = "down"; once(sg, "a", () => { floater("*knocks a mug off the desk*", cat.x, cat.y - 22, "#ffd0dc"); burst(6, cat.x + 6, cat.y - 4, { speed: [20, 40], gravity: 140, life: [0.4, 0.6], size: [1, 2], colors: ["#f7f3ea", "#5a3a26"] }); }); }
+      } },
+    // last: you, at the door, right where your first day begins
+    { cap: ["And introducing", "YOU", "as The New Hire"], dur: 3.0, zoom: 2.4, focus: focusOn(player),
+      setup() { put(player, 8, 18, "up"); },
+      update(t, dt, sg) {
+        if (t < 1.2) player.dir = ["left", "right", "left", "down"][Math.floor(t / 0.3)];
+        if (t > 0.9) once(sg, "q", () => floater("?", player.x, player.y - 32, "#ffffff"));
+        if (t > 1.6) { player.dir = "down"; bounce(player, t, 1.7, 0.4, 7); once(sg, "hi", () => floater("Hi!", player.x, player.y - 34, "#fff3b0")); }
+      } },
+  ];
+}
+// The whole cast laughing together; plays behind the title card
+const GROUP = { zoom: 1.45, focus: () => ({ x: 9 * T + 8, y: 3 * T + 6 }),
+  setup() {
+    const others = npcs.filter(n => n !== SB).sort((a, b) => a.x - b.x);
+    others.forEach((n, i) => put(n, STANDUP_SPOTS[i][0], STANDUP_SPOTS[i][1], "down"));
+    put(SB, 9, 3, "down"); put(player, 9, 4, "down");
+    cat.x = 8 * T + 8; cat.y = 5 * T - 3; cat.state = "sit"; cat.dir = "down";
+    P_("ps").caught = 0; P_("ps").hop = 0;
+  },
+  update(t, dt, sg) {
+    sg.lt = (sg.lt || 0) - dt;
+    if (sg.lt <= 0) {
+      sg.lt = 0.22;
+      const all = [player, ...npcs];
+      const e = all[Math.floor(Math.random() * all.length)];
+      e.ihop = 0.35;
+      floater(["HA!", "HAHA!", "HA HA!", "Hah!"][Math.floor(Math.random() * 4)], e.x, e.y - 32, "#ffffff");
+    }
+    for (const e of [player, ...npcs]) {
+      if (e.ihop > 0) { e.ihop = Math.max(0, e.ihop - dt); e.lift = Math.sin((1 - e.ihop / 0.35) * Math.PI) * 5; } else e.lift = 0;
+    }
+  } };
+function showCaption(cap) {
+  document.getElementById("capKicker").textContent = cap[0];
+  document.getElementById("capName").textContent = cap[1];
+  document.getElementById("capRole").textContent = cap[2];
+  capEl.hidden = false;
+  capEl.style.animation = "none"; void capEl.offsetWidth; capEl.style.animation = "";
+}
+function startIntroShow() {
+  startEl.hidden = true;
+  fadeEl.hidden = true;
+  startMusic();
+  intro.on = true; intro.segs = buildIntro(); intro.i = -1;
+  skipBtn.hidden = false;
+  nextSeg();
+}
+function nextSeg() {
+  capEl.hidden = true;
+  intro.i++; intro.t = 0; intro.frozen = false;
+  for (const e of [player, ...npcs]) e.lift = 0;
+  parts.length = 0; floaters.length = 0;
+  if (intro.i >= intro.segs.length) return showTitle();
+  const sg = intro.segs[intro.i];
+  intro.zoom = sg.zoom || 2.3;
+  intro.tint = TINTS[intro.i % TINTS.length];
+  sg.setup();
+  const f = sg.focus(); intro.focus = f; camFX = f.x; camFY = f.y;
+}
+function updateIntro(dt) {
+  if (!intro.on) return;
+  if (intro.title) { GROUP.update(0, dt, GROUP); return; }
+  const sg = intro.segs[intro.i];
+  if (!sg) return;
+  if (!intro.frozen) {
+    intro.t += dt;
+    sg.update(intro.t, dt, sg);
+    if (intro.t >= sg.dur) {
+      if (sg.cap) { intro.frozen = true; intro.ft = 0; showCaption(sg.cap); }
+      else nextSeg();
+    }
+  } else {
+    intro.ft += dt;
+    if (intro.ft >= 1.25) nextSeg();
+  }
+  intro.focus = sg.focus();
+}
+function showTitle() {
+  if (intro.title) return;
+  intro.title = true; intro.frozen = false;
+  capEl.hidden = true; skipBtn.hidden = true;
+  intro.zoom = GROUP.zoom;
+  parts.length = 0; floaters.length = 0;
+  GROUP.setup();
+  for (const e of [player, ...npcs]) { e.lift = 0; e.ihop = 0; }
+  intro.focus = GROUP.focus(); camFX = intro.focus.x; camFY = intro.focus.y;
+  titleEl.hidden = false;
+  stingMusic();
+}
+function beginDay() {
+  if (!intro.title) return;
+  intro.on = false; intro.title = false;
+  titleEl.hidden = true;
+  stopMusic();
+  game.classList.remove("intro");
+  parts.length = 0; floaters.length = 0;
+  for (const n of npcs) {
+    put(n, n.home[0], n.home[1], "down");
+    Object.assign(n, { hop: 0, caught: 0, ihop: 0, path: null, target: null, forced: false, shout: 0 });
+  }
+  SB.dir = "up"; SB.shout = 0;
+  put(player, 8, 18, "up");
+  cat.x = 10 * T + 8; cat.y = 13 * T - 3; cat.state = "sit"; cat.timer = 3; cat.path = null;
+  camFX = player.x; camFY = player.y;
+  fadeEl.hidden = false; fadeEl.style.opacity = 1;
+  setPhase("fade");
+}
+document.getElementById("playBtn").addEventListener("click", startIntroShow);
+titleEl.addEventListener("click", beginDay);
+skipBtn.addEventListener("click", showTitle);
+addEventListener("keydown", e => {
+  if (intro.on && !intro.title && e.code === "Escape") { e.preventDefault(); showTitle(); return; }
+  if (!startEl.hidden && (e.code === "Enter" || e.code === "Space")) { e.preventDefault(); startIntroShow(); }
+  else if (intro.title && (e.code === "Enter" || e.code === "Space" || e.code === "KeyE")) { e.preventDefault(); beginDay(); }
+});
+
 /* ---------- Loop ---------- */
 let last = 0;
 function loop(t) {
   const dt = Math.min(0.05, (t - last) / 1000 || 0);
   last = t;
+  if (intro.on || !startEl.hidden) {
+    if (!startEl.hidden) drawCity(t / 1000);
+    updateIntro(dt);
+    if (!intro.frozen) { updateEffects(dt); updateFloaters(dt); updateOutsiders(dt); }
+    if (intro.on) { const k = Math.min(1, dt * 6); camFX += (intro.focus.x - camFX) * k; camFY += (intro.focus.y - camFY) * k; }
+    render(t / 1000);
+    requestAnimationFrame(loop);
+    return;
+  }
   updateCutscene(dt);
   updateEffects(dt);
   updateAscend(dt);
@@ -2806,7 +3246,7 @@ function start(data) {
   if (data && data.state) Object.assign(state, data.state);
   updateHud();
   requestAnimationFrame(t => { last = t; requestAnimationFrame(loop); });
-  if (state.introDone) { setPhase("done"); fadeEl.hidden = true; showHint(); }
+  if (state.introDone) { setPhase("done"); fadeEl.hidden = true; startEl.hidden = true; game.classList.remove("intro"); showHint(); }
   camFX = player.x; camFY = player.y;
 }
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});

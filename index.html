@@ -229,7 +229,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 29;
+const VERSION = 30;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Office Life v" + VERSION; });
 const T = 16;
 
@@ -845,6 +845,14 @@ function drawCounter(c, r, px, py) {
   F(px + 7, py + 7, 1, 9, "#6e4c31");
   F(px + 5, py + 10, 1, 2, "#e6d3a8"); F(px + 10, py + 10, 1, 2, "#e6d3a8");
   if (at(c - 1, r) !== "k" && at(c - 1, r) !== "m") F(px, py, 1, T, C.out);
+  if (c === 25 && r === 2 && !state.oldCoffeeFound && !state.retro) {
+    // one odd, old-looking cupboard door: the 1999 coffee is behind it
+    F(px + 1, py + 7, 6, 9, "#6a4f9a"); F(px + 1, py + 7, 6, 1, "#8a6cc0"); F(px + 1, py + 15, 6, 1, "#4a3570");
+    F(px + 2, py + 9, 4, 4, "#7b5fae"); F(px + 5, py + 10, 1, 2, "#f2c46d");
+    const tw = Math.floor(performance.now() / 260) % 9;
+    if (tw === 0) F(px + 2, py + 8, 1, 1, "#ffffff");
+    if (tw === 3) F(px + 4, py + 13, 1, 1, "#fff3b0");
+  }
 }
 function drawCoffee(px, py, time) {
   F(px + 2, py - 8, 12, 14, C.out);
@@ -2138,7 +2146,7 @@ function setRetro(on) {
 }
 function findOldCoffee() {
   if (!state.introDone || state.vamp || whip.phase || player.seated || state.standup) return openDialog([{ t: INFO.k[0] }]);
-  openDialog([{ t: "At the back of the cupboard, behind the crumbs, there's a dusty coffee bag. The label says: BEST BEFORE 1999.", choices: [
+  openDialog([{ t: "This cupboard door is a different colour from the others, and it creaks. Behind it there's a dusty coffee bag. The label says: BEST BEFORE 1999.", choices: [
     { label: "Brew it", fn: brewOldCoffee },
     { label: "Put it back", fn: () => openDialog([{ t: "You put it back. Some things are best left in the past." }]) },
   ] }]);
@@ -2748,7 +2756,7 @@ function interact() {
   }
   if (ch === "m" && state.retro) return retroCoffeeMachine();
   if (ch === "k" && state.retro && Math.floor(fx / T) === 27) return openDialog([{ t: "A fax machine. It's receiving a 40-page fax from the other teams. Every page starts with 'Quick question'." }]);
-  if (ch === "k" && !state.retro && !state.oldCoffeeFound) return findOldCoffee();
+  if (ch === "k" && !state.retro && !state.oldCoffeeFound && Math.floor(fx / T) === 25) return findOldCoffee();
   if (ch === "m") return brewCoffee();
   if (ch === "R") return lookInMirror();
   if (ch === "b") return sprintBoard();

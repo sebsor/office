@@ -77,6 +77,9 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 .fade-day{margin:0;font-size:clamp(30px,7vw,52px);font-weight:700;color:#3a2316;letter-spacing:.02em}
 .fade-sub{margin:0;font-size:clamp(15px,3.5vw,20px);color:#8a5a34}
 #pad{position:absolute;inset:auto 0 0 0;height:0}
+#pov{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);padding:10px 14px 12px;display:grid;gap:8px;justify-items:center;z-index:2}
+#pov p{margin:0;font-size:15px;color:var(--muted)}
+#povCanvas{height:min(336px,52vh);width:auto;image-rendering:pixelated;border-radius:3px}
 #end{position:absolute;inset:0;background:#ffffff;display:grid;place-items:center;overflow-y:auto;
   padding-block:calc(24px + env(safe-area-inset-top,0px)) calc(24px + env(safe-area-inset-bottom,0px));
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
@@ -147,6 +150,11 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
     </div>
   </div>
 
+  <div id="pov" class="frame" hidden aria-label="What you see">
+    <p>You peek over P. S.'s shoulder...</p>
+    <canvas id="povCanvas" width="72" height="112"></canvas>
+  </div>
+
   <div id="end" hidden>
     <div class="end-card">
       <p class="end-kicker">End of Day 1</p>
@@ -168,7 +176,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 16;
+const VERSION = 19;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Commit Valley v" + VERSION; });
 const T = 16;
 
@@ -202,10 +210,14 @@ const MAP = [
   row("................", "#", "......", "#", ",,,,"),
   row("p...............", "#", "p....p", "#", "oo,,"),
   row("pp....MMM.......", "#", "......", "#", ",,,,"),
+  // south wall: glass G looks out over the other IT teams' floor (z), which you can't walk on
+  row("GGGGG#####GGGGGG", "#", "GGGGGG", "#", "####"),
+  "#" + "z".repeat(28) + "#",
+  "#" + "z".repeat(28) + "#",
   "#".repeat(30),
 ];
 const MW = 30, MH = MAP.length;
-const WALLS = "#-wbCPR", OBJ = "dncpskmfxyTo";
+const WALLS = "#-wbCPRGz", OBJ = "dncpskmfxyTo";
 const at = (c, r) => (r < 0 || r >= MH || c < 0 || c >= MW) ? "#" : MAP[r][c];
 const isWall = ch => WALLS.includes(ch);
 const isDesk = ch => ch === "d" || ch === "n";
@@ -514,6 +526,12 @@ const chars = [player, ...npcs];
 let talkingTo = null;
 
 /* ---------- Floors & walls ---------- */
+function drawDarkFloor(c, r, px, py) {
+  F(px, py, T, T, (c + r) & 1 ? "#34303d" : "#312d39");
+  const n = hash(c, r);
+  F(px + ((n >>> 3) & 15), py + ((n >>> 9) & 15), 1, 1, "#433d4d");
+  if (r === MH - 3) F(px, py, T, 2, "rgba(0,0,0,.25)");
+}
 function floorStyle(c, r, ch) {
   if (ch === "," || c >= 24) return "tile";
   if (c >= 18 && c <= 23) return r < 11 ? "meet" : "wood";
@@ -551,6 +569,17 @@ function drawFloor(c, r, px, py, ch) {
   }
 }
 function drawWall(c, r, px, py, ch) {
+  if (ch === "z") return drawDarkFloor(c, r, px, py);
+  if (ch === "G") {
+    drawDarkFloor(c, r, px, py);
+    F(px, py, T, T, "rgba(160,205,230,.24)");
+    F(px, py, T, 3, "#9aa6b2"); F(px, py, T, 1, "#c4ccd4");
+    F(px, py + 13, T, 3, "#7d8894"); F(px, py + 15, T, 1, C.out);
+    if (at(c - 1, r) !== "G" || c % 2 === 0) F(px, py + 3, 1, 10, "#7d8894");
+    F(px + 4, py + 9, 1, 1, "rgba(255,255,255,.55)"); F(px + 5, py + 8, 1, 1, "rgba(255,255,255,.55)"); F(px + 6, py + 7, 1, 1, "rgba(255,255,255,.4)");
+    F(px + 11, py + 6, 1, 1, "rgba(255,255,255,.35)"); F(px + 12, py + 5, 1, 1, "rgba(255,255,255,.35)");
+    return;
+  }
   const below = at(c, r + 1), above = at(c, r - 1);
   const face = ch !== "#" || !isWall(below);
   if (!face) {
@@ -963,6 +992,15 @@ function drawRobot(e) {
   const scan = Math.floor(performance.now() / 120) % 10;
   F(sx, sy + scan, 12, 1, "rgba(255,255,255,.12)");
 }
+const onPhone = n => n.def.id === "ps" && !state.met.includes("ps") && !n.caught && !n.hop;
+function drawPhoneInHands(e) {
+  const x = Math.round(e.x), y = Math.round(e.y - (e.lift || 0));
+  const glow = ["#7fd1e8", "#f6d65b", "#b48ee0", "#7ccf6a"][Math.floor(performance.now() / 300) % 4];
+  F(x - 4, y - 18, 8, 1, "rgba(127,209,232,.35)");
+  F(x - 3, y - 13, 6, 6, C.out);
+  F(x - 2, y - 12, 4, 4, glow);
+  F(x - 4, y - 9, 2, 2, e.look.skin); F(x + 2, y - 9, 2, 2, e.look.skin);
+}
 function drawBubble(x, y) {
   x = Math.round(x); y = Math.round(y) - (Math.floor(performance.now() / 400) % 2);
   F(x - 7, y - 6, 14, 9, C.out);
@@ -1036,9 +1074,32 @@ function drawExclaim(x, y) {
 /* ---------- Portrait (48x48, scaled up in CSS) ---------- */
 const pcv = document.getElementById("portrait");
 const pg = pcv.getContext("2d");
+function drawCatPortrait(mood) {
+  const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  const cream = "#f3ead8", cream2 = "#e2d4b8", seal = "#8a6a52", seal2 = "#6b4f3c";
+  const s = Spr();
+  s.r(6, 34, 36, 14, cream);                      // fluffy chest
+  s.r(9, 12, 30, 24, cream); s.r(12, 36, 24, 2, cream);
+  s.r(8, 4, 8, 12, seal2); s.r(32, 4, 8, 12, seal2); // ears
+  s.draw(pg);
+  P(10, 6, 4, 8, "#d79a9a"); P(34, 6, 4, 8, "#d79a9a");
+  P(14, 16, 20, 18, seal); P(16, 14, 16, 4, seal); P(17, 30, 14, 5, seal2);   // seal-point mask
+  P(10, 16, 4, 12, cream2); P(34, 16, 4, 12, cream2);
+  for (const [x, y] of [[8, 38], [14, 41], [20, 37], [28, 40], [34, 37], [38, 42]]) P(x, y, 2, 3, cream2);
+  if (mood === "happy") { P(16, 22, 6, 1, C.out); P(26, 22, 6, 1, C.out); P(16, 21, 1, 1, C.out); P(31, 21, 1, 1, C.out); }
+  else {
+    P(16, 20, 6, 5, "#5aa9e6"); P(26, 20, 6, 5, "#5aa9e6");
+    P(18, 20, 2, 5, C.out); P(28, 20, 2, 5, C.out);
+    P(16, 20, 1, 1, "#ffffff"); P(26, 20, 1, 1, "#ffffff");
+  }
+  P(22, 27, 4, 2, "#e8a0a8"); P(23, 29, 2, 1, seal2);
+  P(21, 31, 2, 1, C.out); P(25, 31, 2, 1, C.out);
+  for (const [x, y, w] of [[4, 27, 10], [5, 30, 9], [34, 27, 10], [34, 30, 9]]) P(x, y, w, 1, "rgba(255,255,255,.85)");
+}
 function drawPortrait(L, mood) {
   pg.clearRect(0, 0, 48, 48);
   const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  if (L.cat) return drawCatPortrait(mood);
   if (L.robot) { P(0, 0, 48, 48, "#24485c"); P(0, 0, 48, 12, "#2a5268"); }
   if (L.aura) {
     P(0, 0, 48, 48, "#f6c843");
@@ -1099,7 +1160,8 @@ function drawPortrait(L, mood) {
 
   // brows
   const brow = L.style === "bald" ? H : H2;
-  if (mood === "angry") { P(14, 15, 3, 1, brow); P(17, 16, 3, 1, brow); P(20, 17, 3, 1, brow); P(25, 17, 3, 1, brow); P(28, 16, 3, 1, brow); P(31, 15, 3, 1, brow); }
+  if (mood === "shock") { P(15, 14, 7, 1, brow); P(26, 14, 7, 1, brow); }
+  else if (mood === "angry") { P(14, 15, 3, 1, brow); P(17, 16, 3, 1, brow); P(20, 17, 3, 1, brow); P(25, 17, 3, 1, brow); P(28, 16, 3, 1, brow); P(31, 15, 3, 1, brow); }
   else { P(15, 17, 7, 1, brow); P(26, mood === "smirk" ? 16 : 17, 7, 1, brow); }
 
   // glasses, then eyes
@@ -1108,7 +1170,8 @@ function drawPortrait(L, mood) {
     P(23, 20, 2, 1, fr); P(12, 20, 2, 1, fr); P(34, 20, 2, 1, fr);
     P(15, 20, 1, 1, "#ffffff"); P(26, 20, 1, 1, "#ffffff");
   }
-  if (mood === "happy") { P(17, 21, 3, 1, C.out); P(28, 21, 3, 1, C.out); P(17, 22, 1, 1, C.out); P(30, 22, 1, 1, C.out); }
+  if (mood === "shock") { P(18, 20, 2, 3, C.out); P(29, 20, 2, 3, C.out); }
+  else if (mood === "happy") { P(17, 21, 3, 1, C.out); P(28, 21, 3, 1, C.out); P(17, 22, 1, 1, C.out); P(30, 22, 1, 1, C.out); }
   else if (L.eyes) { P(18, 21, 2, 2, L.eyes); P(29, 21, 2, 2, L.eyes); P(19, 22, 1, 1, C.out); P(30, 22, 1, 1, C.out); P(18, 21, 1, 1, "#ffffff"); P(29, 21, 1, 1, "#ffffff"); }
   else { P(18, 21, 2, 2, C.out); P(29, 21, 2, 2, C.out); if (!L.glasses) { P(18, 21, 1, 1, "#ffffff"); P(29, 21, 1, 1, "#ffffff"); } }
   if (L.lashes) { P(17, 20, 1, 1, C.out); P(31, 20, 1, 1, C.out); }
@@ -1126,7 +1189,8 @@ function drawPortrait(L, mood) {
   } else if (L.beard === "stache") {
     P(18, 28, 12, 2, H); P(17, 30, 2, 1, H); P(29, 30, 2, 1, H);
   }
-  if (mood === "angry") { P(20, 30, 8, 4, "#5a2420"); P(21, 30, 6, 1, "#f7f3ea"); P(22, 33, 4, 1, "#b5584a"); }
+  if (mood === "shock") { P(22, 30, 4, 3, "#5a2420"); P(23, 30, 2, 1, "#7a3a32"); }
+  else if (mood === "angry") { P(20, 30, 8, 4, "#5a2420"); P(21, 30, 6, 1, "#f7f3ea"); P(22, 33, 4, 1, "#b5584a"); }
   else if (mood === "happy") { P(20, 31, 8, 1, lip); P(21, 32, 6, 1, "#b5584a"); }
   else if (mood === "smirk") { P(22, 31, 5, 1, lip); P(27, 30, 1, 1, lip); }
   else if (mood === "queasy") { P(21, 31, 6, 1, lip); P(22, 32, 2, 1, lip); P(26, 30, 1, 1, lip); }
@@ -1563,6 +1627,7 @@ function endDay() {
   if (state.yogurtEaten) titles.push("Iron Stomach (Almost)");
   if (state.whips >= 8) titles.push("Professionally Motivated");
   if (metCount() >= TOTAL) titles.push("Team Player");
+  if (cat.pets >= 5) titles.push("Cat Person");
   if (!titles.length) titles.push("Survived Day One");
   document.getElementById("endTitle").textContent = titles[0];
   document.getElementById("endBadges").innerHTML = titles.slice(1).map(t => `<span>${t}</span>`).join("");
@@ -1573,6 +1638,7 @@ function endDay() {
     ["Expired yogurts eaten", state.yogurtEaten ? 1 : 0],
     ["Escape attempts", state.leaveTries],
     ["Whip cracks taken", state.whips],
+    ["Times MAUI was petted", cat.pets],
   ];
   document.getElementById("endStats").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   const end = document.getElementById("end");
@@ -1726,6 +1792,9 @@ function updateNpc(n, dt) {
   if (n === SB && cut.phase !== "done" && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
   if (n === SB && whip.phase && !n.forced) { n.moving = false; stepAnim(n, dt); return; }
   if (n.path && talkingTo !== n) { followPath(n, dt); return; }
+  if (n.hop > 0) { n.hop = Math.max(0, n.hop - dt); n.lift = Math.sin((1 - n.hop / 0.45) * Math.PI) * 7; } else n.lift = 0;
+  if (n.caught > 0) n.caught = Math.max(0, n.caught - dt);
+  if (onPhone(n)) { n.moving = false; n.target = null; n.dir = "down"; stepAnim(n, dt); return; }
   const near = Math.hypot(player.x - n.x, player.y - n.y) < 26;
   if (talkingTo === n || (near && !n.forced)) {
     n.moving = false; n.target = null; n.wait = 1.5;
@@ -1764,6 +1833,255 @@ function updateNpc(n, dt) {
     }
   }
   stepAnim(n, dt);
+}
+
+/* ---------- MAUI, the team mascot (a Ragdoll cat) ---------- */
+const MAUI_WHO = { name: "MAUI", role: "Team mascot · Ragdoll", look: { cat: true } };
+const cat = { x: 10 * T + 8, y: 13 * T - 3, dir: "down", state: "sit", timer: 3, path: null, step: 0, stepT: 0, moving: false, zzz: 0, pets: 0, met: false };
+const WALK_TILES = (() => {
+  const seen = new Set(["8,18"]), q = [[8, 18]], out = [];
+  while (q.length) {
+    const [c, r] = q.shift(); out.push([c, r]);
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = (c + dc) + "," + (r + dr);
+      if (seen.has(k) || solid(at(c + dc, r + dr))) continue;
+      seen.add(k); q.push([c + dc, r + dr]);
+    }
+  }
+  return out;
+})();
+function catRest() {
+  const roll = Math.random();
+  if (roll < 0.25) { cat.state = "sleep"; cat.timer = 8 + Math.random() * 7; cat.zzz = 0.5; }
+  else { cat.state = "sit"; cat.timer = 2 + Math.random() * 4; cat.dir = ["down", "left", "right"][Math.floor(Math.random() * 3)]; }
+}
+function updateCat(dt) {
+  if (dlg.open && talkingTo === cat) { cat.moving = false; stepAnim(cat, dt); return; }
+  if (cat.state === "walk" && cat.path) {
+    const [tx, ty] = cat.path[0];
+    const dx = tx - cat.x, dy = ty - cat.y, sp = 26 * dt;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+      cat.x = tx; cat.y = ty; cat.path.shift();
+      if (!cat.path.length) { cat.path = null; cat.moving = false; catRest(); }
+    } else if (Math.abs(dx) >= 1) { cat.x += Math.sign(dx) * Math.min(sp, Math.abs(dx)); cat.dir = dx < 0 ? "left" : "right"; cat.moving = true; }
+    else { cat.y += Math.sign(dy) * Math.min(sp, Math.abs(dy)); cat.dir = dy < 0 ? "up" : "down"; cat.moving = true; }
+    stepAnim(cat, dt);
+    return;
+  }
+  cat.moving = false;
+  cat.timer -= dt;
+  if (cat.state === "sleep") {
+    cat.zzz -= dt;
+    if (cat.zzz <= 0) { cat.zzz = 1.6; floater("z", cat.x + 4, cat.y - 12, "#dfe7f2"); }
+  }
+  if (cat.timer <= 0) {
+    const [tc, tr] = WALK_TILES[Math.floor(Math.random() * WALK_TILES.length)];
+    const p = findPath(Math.floor(cat.x / T), Math.floor((cat.y - 2) / T), tc, tr);
+    if (p && p.length > 1 && p.length < 22) { cat.path = p.map(([c, r]) => [c * T + 8, (r + 1) * T - 3]); cat.state = "walk"; }
+    else catRest();
+  }
+  stepAnim(cat, dt);
+}
+function drawCat() {
+  const x = Math.round(cat.x), y = Math.round(cat.y);
+  const cream = "#f3ead8", seal = "#8a6a52", seal2 = "#6b4f3c", eye = "#5aa9e6";
+  F(x - 6, y - 1, 12, 2, "rgba(20,10,20,.25)");
+  const s = Spr();
+  if (cat.state === "sleep") {
+    s.r(x - 6, y - 6, 12, 6, cream); s.r(x - 5, y - 7, 10, 1, cream);
+    s.r(x + 2, y - 8, 5, 4, cream);
+    s.d(x + 3, y - 7, 3, 2, seal); s.d(x + 3, y - 9, 1, 1, seal2); s.d(x + 5, y - 9, 1, 1, seal2);
+    s.d(x - 6, y - 2, 9, 2, seal2); s.d(x - 4, y - 5, 4, 1, "#e2d4b8");
+    s.draw(g); return;
+  }
+  const side = cat.dir === "left" || cat.dir === "right", flip = cat.dir === "left" ? -1 : 1;
+  const leg = cat.moving ? (cat.step & 1) : 0;
+  if (side) {
+    // tail, body, legs, head (mirrored for left)
+    const X = (dx, w) => flip > 0 ? x + dx : x - dx - w;
+    s.r(X(-9, 3), y - 10, 3, 5, seal2); s.r(X(-8, 3), y - 6, 3, 2, seal2);
+    s.r(X(-5, 10), y - 7, 10, 5, cream);
+    s.r(X(-4, 2), y - 2 - leg, 2, 2, cream); s.r(X(2, 2), y - 2 - (1 - leg), 2, 2, cream);
+    s.r(X(3, 6), y - 11, 6, 6, cream);
+    s.r(X(3, 2), y - 13, 2, 2, seal2); s.r(X(7, 2), y - 13, 2, 2, seal2);
+    s.d(X(5, 4), y - 10, 4, 4, seal);
+    s.d(X(7, 1), y - 9, 1, 1, eye);
+    s.d(X(-3, 6), y - 3, 6, 1, "#e2d4b8");
+  } else if (cat.dir === "up") {
+    s.r(x - 1, y - 14, 2, 6, seal2);
+    s.r(x - 5, y - 7, 10, 6, cream);
+    s.r(x - 3, y - 11, 6, 5, cream);
+    s.r(x - 3, y - 13, 2, 2, seal2); s.r(x + 1, y - 13, 2, 2, seal2);
+    s.d(x - 2, y - 11, 4, 1, "#e2d4b8");
+  } else {
+    s.r(x + 4, y - 5, 4, 2, seal2); s.r(x + 6, y - 7, 2, 2, seal2);
+    s.r(x - 5, y - 7, 10, 7, cream);
+    s.r(x - 4, y - 13, 8, 7, cream);
+    s.r(x - 4, y - 15, 2, 2, seal2); s.r(x + 2, y - 15, 2, 2, seal2);
+    s.d(x - 3, y - 12, 6, 5, seal);
+    s.d(x - 2, y - 11, 1, 1, eye); s.d(x + 1, y - 11, 1, 1, eye);
+    s.d(x, y - 9, 1, 1, "#e8a0a8");
+    s.d(x - 3, y - 6, 6, 2, "#ffffff");
+  }
+  s.draw(g);
+}
+function petCat() {
+  state.serverPokes = 0;
+  talkingTo = cat;
+  if (cat.state === "sleep") return openDialog([{ t: "MAUI is fast asleep. You decide not to wake the team mascot. That's how outages start." }]);
+  cat.path = null; cat.state = "sit"; cat.timer = 3; cat.dir = facingTo(cat, player);
+  cat.pets++; state.catPets = cat.pets;
+  burst(10, cat.x, cat.y - 12, { angle: -Math.PI / 2, spread: 1.2, speed: [12, 30], life: [0.6, 1.1], size: [1, 2], colors: ["#f29bb0", "#e9788a", "#ffd0dc"], fade: true });
+  floater("purr", cat.x, cat.y - 18, "#ffd0dc");
+  let lines;
+  if (!cat.met) {
+    cat.met = true;
+    lines = [
+      { t: "A fluffy Ragdoll cat pads over and inspects your shoes. The tag on its collar says: MAUI. Team mascot." },
+      { ...say(MAUI_WHO, "Mrrrp!", "neutral") },
+    ];
+  } else if (state.golden && !cat.sawGold) {
+    cat.sawGold = true;
+    lines = [{ t: "MAUI stares at your floating golden hair. Then MAUI swats at it. Repeatedly." }];
+  } else {
+    const pool = [
+      [say(MAUI_WHO, "Mrrp?", "neutral"), { t: "MAUI blinks at you slowly. In cat, that means your code review passed." }],
+      [say(MAUI_WHO, "Mew.", "happy"), { t: "MAUI flops over and shows you its belly. It's a trap. Everybody knows it's a trap." }],
+      [{ t: "You pet MAUI. MAUI purrs like a server fan under load." }],
+      [say(MAUI_WHO, "Mrrrrrrow.", "happy"), { t: "MAUI headbutts your hand. Approved for merge." }],
+      [{ t: "MAUI goes completely limp in your arms, the way only a Ragdoll can. You are now holding twelve kilos of fluff." }],
+    ];
+    lines = pool[Math.floor(Math.random() * pool.length)];
+  }
+  openDialog(lines);
+}
+
+/* ---------- The dark side: other IT teams beyond the glass ---------- */
+const OUTSIDER_LOOKS = [
+  { skin: "#e8b48e", hair: "#6b4226", style: "short", beard: "none", shirt: "#7a6ab0", pants: "#3b3b4b" },
+  { skin: "#c68a5e", hair: "#1f1816", style: "long", beard: "none", shirt: "#c0563f" },
+  { skin: "#f1c6a2", hair: "#d8b25a", style: "buzz", beard: "none", shirt: "#4a9a6a", glasses: true },
+  { skin: "#a8714a", hair: "#2a201a", style: "curly", beard: "stubble", shirt: "#3d6fb0" },
+  { skin: "#eebf98", hair: "#7d7468", style: "bald", beard: "full", shirt: "#8a8f99" },
+  { skin: "#f0c09a", hair: "#5a3a26", style: "short", beard: "stache", shirt: "#b0864a" },
+];
+const outsiders = OUTSIDER_LOOKS.map((look, i) => ({
+  look, x: 30 + i * 70, y: (MH - 2 - (i % 2)) * T + T - 3, vx: (i % 2 ? -1 : 1) * (18 + (i * 7) % 16),
+  dir: i % 2 ? "left" : "right", step: 0, stepT: 0, moving: true, pause: 0,
+}));
+function updateOutsiders(dt) {
+  for (const o of outsiders) {
+    if (o.pause > 0) { o.pause -= dt; o.moving = false; if (o.pause <= 0) o.dir = o.vx < 0 ? "left" : "right"; stepAnim(o, dt); continue; }
+    o.moving = true;
+    o.x += o.vx * dt;
+    if (o.x < 22 || o.x > MW * T - 22) { o.vx = -o.vx; o.x = Math.max(22, Math.min(MW * T - 22, o.x)); }
+    o.dir = o.vx < 0 ? "left" : "right";
+    if (Math.random() < dt * 0.12) { o.pause = 1 + Math.random() * 2.5; o.dir = "up"; }
+    stepAnim(o, dt);
+  }
+}
+const GLASS_QUIPS = [
+  "Don't make eye contact. They'll pull you into a cross-team alignment meeting.",
+  "Their stand-ups last forty-five minutes. We don't talk about it.",
+  "If one of them waves, don't wave back. That's how dependencies start.",
+  "Rumour has it they have a test environment that actually works. Nobody believes it.",
+  "They use tabs AND spaces. Sometimes in the same file.",
+  "Every time we deploy, one of them sends a message that starts with 'Quick question...'",
+];
+function glassTalk() {
+  let best = null, bd = Infinity;
+  for (const n of npcs) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = n; } }
+  if (!best) return;
+  const d = best.def;
+  best.dir = facingTo(best, player);
+  const who = bd > 60 ? { ...d, role: "Calling over from across the room" } : d;
+  openDialog([
+    say(who, "Ah, the glass. That's the dark side, where the other IT teams reside.", "smirk"),
+    say(who, GLASS_QUIPS[Math.floor(Math.random() * GLASS_QUIPS.length)], "neutral"),
+  ]);
+}
+
+/* ---------- P. S. caught on his phone ---------- */
+const povEl = document.getElementById("pov"), povCv = document.getElementById("povCanvas"), pv = povCv.getContext("2d");
+const SHAPES = [[[0,0],[1,0],[2,0],[3,0]], [[0,0],[1,0],[0,1],[1,1]], [[0,0],[1,0],[2,0],[1,1]], [[0,0],[0,1],[1,1],[2,1]],
+  [[2,0],[0,1],[1,1],[2,1]], [[1,0],[2,0],[0,1],[1,1]], [[0,0],[1,0],[1,1],[2,1]]];
+const BLOCKS = ["#7fd1e8", "#f6d65b", "#b48ee0", "#5c8fe0", "#f2a04b", "#7ccf6a", "#e9788a"];
+const pov = { on: false, grid: [], piece: null, tick: 0, flash: 0, lines: 37 };
+function povFits(shape, px, py) {
+  return shape.every(([cx, cy]) => { const x = px + cx, y = py + cy; return x >= 0 && x < 10 && y < 17 && (y < 0 || !pov.grid[y][x]); });
+}
+function povSpawn() {
+  const k = Math.floor(Math.random() * SHAPES.length);
+  pov.piece = { s: SHAPES[k], c: BLOCKS[k], x: 3, y: 0, tx: Math.floor(Math.random() * 7) };
+}
+function povStart() {
+  pov.grid = Array.from({ length: 17 }, () => Array(10).fill(null));
+  for (let y = 11; y < 17; y++) for (let x = 0; x < 10; x++) {
+    const gap = x === 4 || (y < 13 && Math.random() < 0.4);
+    if (!gap) pov.grid[y][x] = BLOCKS[Math.floor(Math.random() * BLOCKS.length)];
+  }
+  pov.piece = { s: SHAPES[0].map(([a, b]) => [b, a]), c: BLOCKS[0], x: 4, y: 0, tx: 4 };
+  pov.tick = 0; pov.flash = 0; pov.on = true;
+  povEl.hidden = false;
+}
+function povStep() {
+  const p = pov.piece;
+  if (p.x !== p.tx && povFits(p.s, p.x + Math.sign(p.tx - p.x), p.y)) p.x += Math.sign(p.tx - p.x);
+  if (povFits(p.s, p.x, p.y + 1)) { p.y++; return; }
+  for (const [cx, cy] of p.s) if (p.y + cy >= 0) pov.grid[p.y + cy][p.x + cx] = p.c;
+  for (let y = 16; y >= 0; y--) {
+    if (pov.grid[y].every(Boolean)) { pov.grid.splice(y, 1); pov.grid.unshift(Array(10).fill(null)); pov.lines++; pov.flash = 0.18; y++; }
+  }
+  povSpawn();
+}
+function updatePov(dt) {
+  if (!pov.on) return;
+  pov.tick += dt;
+  while (pov.tick > 0.11) { pov.tick -= 0.11; povStep(); }
+  pov.flash = Math.max(0, pov.flash - dt);
+  const P = (x, y, w, h, c) => { pv.fillStyle = c; pv.fillRect(x, y, w, h); };
+  P(0, 0, 72, 112, "#3a3540");
+  P(0, 0, 72, 30, "#4a4450");
+  // phone
+  P(7, 3, 58, 104, C.out); P(8, 4, 56, 102, "#1d1f26");
+  P(11, 10, 50, 85, "#0e1a2a");
+  for (let y = 0; y < 17; y++) for (let x = 0; x < 10; x++) {
+    const c = pov.grid[y][x];
+    if (c) { P(11 + x * 5, 10 + y * 5, 5, 5, c); P(11 + x * 5, 10 + y * 5, 5, 1, "rgba(255,255,255,.35)"); P(11 + x * 5 + 4, 10 + y * 5, 1, 5, "rgba(0,0,0,.25)"); }
+  }
+  const p = pov.piece;
+  for (const [cx, cy] of p.s) if (p.y + cy >= 0) { P(11 + (p.x + cx) * 5, 10 + (p.y + cy) * 5, 5, 5, p.c); P(11 + (p.x + cx) * 5, 10 + (p.y + cy) * 5, 5, 1, "rgba(255,255,255,.45)"); }
+  if (pov.flash > 0) P(11, 10, 50, 85, "rgba(255,255,255,.35)");
+  P(33, 99, 6, 3, "#3a3d48");
+  // hands holding the phone
+  const skin = BYID.ps.look.skin, sk2 = shade(skin, 0.85);
+  P(0, 64, 10, 40, skin); P(6, 70, 6, 8, skin); P(6, 82, 6, 8, skin); P(0, 64, 10, 2, sk2);
+  P(58, 74, 14, 38, skin); P(46, 84, 16, 9, skin); P(46, 92, 16, 1, sk2); P(58, 74, 1, 10, sk2);
+}
+function stopPov() { pov.on = false; povEl.hidden = true; }
+function catchPS(n) {
+  keys.clear(); player.moving = false;
+  povStart();
+  after(3.2, () => {
+    stopPov();
+    n.hop = 0.45; n.caught = 1.6;
+    n.dir = facingTo(n, player);
+    fx.shake = 0.2;
+    after(1.1, () => {
+      talkingTo = n;
+      state.met.push("ps");
+      updateHud();
+      const d = n.def;
+      const lines = [
+        say(d, "WAH! Oh! H-hi! I didn't see you there!", "shock"),
+        say(d, "I'm P. S., the product owner. I was just... reviewing the backlog. On my phone.", "smirk"),
+        say(d, "It's a very visual backlog. Lots of blocks. You prioritise them, stack them, clear them. Very agile.", "neutral"),
+        say(d, "I am REALLY working. Anyway! If you ever wonder why a ticket matters, come and ask me.", "happy"),
+      ];
+      if (metCount() >= TOTAL) lines.push({ t: "That's everyone on the team! Head back to S. B. by the sprint board." });
+      openDialog(lines, () => updateHud());
+    });
+  });
 }
 
 /* ---------- Path finding (breadth-first search over floor tiles) ---------- */
@@ -1880,11 +2198,13 @@ function interact() {
   if (player.seated) { tryStand(); return; }
   const [dx, dy] = DIRV[player.dir];
   const fx = player.x + dx * 12, fy = player.y - 3 + dy * 12;
+  if (Math.hypot(fx - cat.x, fy - (cat.y - 4)) < 11) return petCat();
   let best = null, bd = 13;
   for (const n of npcs) {
     const d = Math.hypot(fx - n.x, fy - (n.y - 3));
     if (d < bd) { bd = d; best = n; }
   }
+  if (best && onPhone(best)) { state.serverPokes = 0; return catchPS(best); }
   if (best) {
     state.serverPokes = 0;
     talkingTo = best;
@@ -1911,6 +2231,7 @@ function interact() {
   if (ch === "m") return brewCoffee();
   if (ch === "R") return lookInMirror();
   if (ch === "b") return sprintBoard();
+  if (ch === "G") return glassTalk();
   const tc = Math.floor(fx / T), tr = Math.floor(fy / T);
   if (ch === "n" || (ch === "c" && tc === 13 && tr === 11)) { state.serverPokes = 0; return sit(); }
   const pool = INFO[ch];
@@ -1996,8 +2317,10 @@ function render(time) {
     }
   }
   for (const d of decals) drawPuddle(d);
+  list.push({ k: cat.y, f: drawCat });
+  for (const o of outsiders) list.push({ k: o.y, f: () => drawPerson(o) });
   for (const e of chars) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.y, f: () => {
-    const lift = e === player ? Math.round(player.lift || 0) : 0;
+    const lift = Math.round(e.lift || 0);
     if (lift) { F(Math.round(e.x) - 5, Math.round(e.y) - 1, 10, 2, "rgba(20,10,20,.25)"); e.y -= lift; }
     if (e === player && (state.golden || (fx.ascend > 1.1 && Math.floor(time * 14) % 2 === 0))) drawAura(e, time, fx.ascend > 0 ? 1.4 : 1);
     if (e === player && player.hurt > 0) {
@@ -2012,6 +2335,10 @@ function render(time) {
   if (SB.crack > 0) drawWhip();
   drawFloaters();
   if (SB.shout > 0) drawNotice(SB.x, SB.y - 30, 2 - SB.shout);
+  for (const n of npcs) {
+    if (onPhone(n)) drawPhoneInHands(n);
+    if (n.caught > 0) drawNotice(n.x, n.y - 30 - (n.lift || 0), 1.6 - n.caught);
+  }
 
   // markers: speech bubble for whoever is in range, yellow "!" over people you haven't met
   let near = null, nd = 30;
@@ -2035,6 +2362,9 @@ function loop(t) {
   updateEffects(dt);
   updateAscend(dt);
   updateWhip(dt);
+  updatePov(dt);
+  updateOutsiders(dt);
+  updateCat(dt);
   updateFloaters(dt);
   if (SB.shout > 0) SB.shout = Math.max(0, SB.shout - dt);
   updatePlayer(dt);

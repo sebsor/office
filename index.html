@@ -177,6 +177,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
     <div class="focus"><span>Focus</span><div class="bar"><i id="hFocus"></i></div></div>
     <div class="hud-row"><span class="muted">Team met</span><span id="hMet" class="quest">0/12</span></div>
     <div class="hud-row"><span class="muted">Coffee</span><span id="hCoffee">0</span></div>
+    <div class="hud-row"><span class="muted">Temp</span><span id="hTemp">21°C</span></div>
     <div class="hud-ver" data-version></div>
   </div>
 
@@ -229,7 +230,7 @@ body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);overfl
 (() => {
 "use strict";
 /* Bump this by one for every release */
-const VERSION = 30;
+const VERSION = 44;
 document.querySelectorAll("[data-version]").forEach(el => { el.textContent = "Office Life v" + VERSION; });
 const T = 16;
 
@@ -245,7 +246,7 @@ function row(a, c17, b, c24, k) {
 }
 const MAP = [
   "#".repeat(30),
-  row("-ww-ww-bbb-ww-C-", "#", "ww-P-w", "#", "-ww-"),
+  row("-wwHww-bbb-ww-C-", "#", "ww-P-w", "#", "-ww-"),
   row("p..............p", "#", "p....p", "#", "kmkf"),
   row("................", "#", "..cc..", "#", ",,,,"),
   row(".dddd....dddd...", "#", ".cxxc.", ".", ",,,,"),
@@ -262,16 +263,36 @@ const MAP = [
   row("ss..............", ".", "......", ".", ",,,p"),
   row("................", "#", "......", "#", ",,,,"),
   row("p...............", "#", "p....p", "#", "oo,,"),
-  row("pp....MMM.......", "#", "......", "#", ",,,,"),
+  row("pp....MMM.......", "#", "......", "#", "V,,,"),
   // south wall: glass G looks out over the other IT teams' floor (z), which you can't walk on
   row("GGGGG#####GGGGGG", "#", "GGGGGG", "#", "####"),
   "#" + "z".repeat(28) + "#",
   "#" + "z".repeat(28) + "#",
   "#".repeat(30),
 ];
-const MW = 30, MH = MAP.length;
-const WALLS = "#-wbCPRGz", OBJ = "dncpskmfxyTo";
-const at = (c, r) => (r < 0 || r >= MH || c < 0 || c >= MW) ? "#" : MAP[r][c];
+// Entrance: an open doorway (D) below the mat, a short hallway (e) between the other teams' areas, and the lifts (E).
+const setTile = (r, c, ch) => { MAP[r] = MAP[r].slice(0, c) + ch + MAP[r].slice(c + 1); };
+for (const c of [7, 8, 9]) { setTile(19, c, "D"); setTile(20, c, "e"); setTile(21, c, "e"); setTile(22, c, "E"); }
+for (const r of [20, 21]) { setTile(r, 6, "#"); setTile(r, 10, "#"); }
+// The secret lair, glued onto the east side. Q = lair wall, Y = big screen, q = lair floor,
+// U = suit pod, W = workbench, I = fire pole. Hidden (reads as solid wall) until it's opened.
+const LAIR = [
+  "########", "QQYYYQQ#", "qqqqqqq#", "qUqqqWq#", "qqqqqqq#", "qqqqqqq#", "qqqqqqq#", "qqqqqqq#",
+  "qqqqqqq#", "qqqqqqq#", "qqqqqqq#", "qqqIqqq#", "qqqqqqq#", "qqqqqqq#",
+  "########", "########", "########", "########", "########", "########", "########", "########", "########",
+];
+MAP.forEach((rw, i) => { MAP[i] = rw + LAIR[i]; });
+const OFFICE_W = 30;
+const MW = MAP[0].length, MH = MAP.length;
+const WALLS = "#-wbCPRGzHQYDeE", OBJ = "dncpskmfxyToVUWI";
+const at = (c, r) => {
+  if (r < 0 || r >= MH || c < 0 || c >= MW) return "#";
+  if (c === 29 && r === 9 && state.lairOpen) return ",";
+  if (state.mechHoles && state.mechHoles.has(c + "," + r)) return "h";
+  if (state.mechOut && MECH_TILES.has(c + "," + r)) return ".";
+  if (c >= OFFICE_W && !state.lairOpen) return "#";
+  return MAP[r][c];
+};
 const isWall = ch => WALLS.includes(ch);
 const isDesk = ch => ch === "d" || ch === "n";
 const solid = ch => WALLS.includes(ch) || OBJ.includes(ch);
@@ -299,14 +320,15 @@ const C = {
 };
 
 /* ---------- The team ----------
-   look: style = short | long | buzz | curly | bald, beard = none | stache | full | stubble
+   look: style = short | long | buzz | curly | bald | shaved, beard = none | stache | full | short | goatee | neck | stubble
+         extras: cap (colour), glasses, wide (heavier build), scruffy, hoodie, collar, lashes, robot
    area: tiles the character wanders within (x0..x1, y0..y1) */
 const TEAM = [
   { id: "sb", name: "S. B.", role: "Agile Team Lead", area: [4, 13, 2, 3],
-    look: { skin: "#e8b48e", hair: "#3b2a20", style: "short", beard: "full", shirt: "#b5523c", collar: "#e9dccb" },
+    look: { skin: "#eab48c", hair: "#6b4226", style: "short", beard: "none", cap: "#2f5fa8", shirt: "#b5523c", collar: "#e9dccb" },
     repeat: [] },
   { id: "ps", name: "P. S.", role: "Product Owner", area: [19, 22, 7, 10],
-    look: { skin: "#eebf98", hair: "#7d7468", style: "short", beard: "none", glasses: true, shirt: "#2f4066", collar: "#f0ece2" },
+    look: { skin: "#eebf98", hair: "#d8b860", style: "crop", beard: "goatee", shirt: "#2f4066", collar: "#f0ece2" },
     intro: [
       { t: "Hi, I'm P. S., the product owner. I decide what we build, and in which order.", mood: "happy" },
       { t: "If you ever wonder why a ticket matters, come ask me. That's literally my job.", mood: "neutral" }],
@@ -315,7 +337,7 @@ const TEAM = [
       [{ t: "Every story needs acceptance criteria. Our QA folks will make sure you remember that.", mood: "neutral" }],
       [{ t: "Ship small, learn fast. Then ship small again.", mood: "happy" }]] },
   { id: "aa", name: "A. A.", role: "Lead Front End Developer", area: [6, 12, 2, 3],
-    look: { skin: "#c68a5e", hair: "#1f1816", style: "curly", beard: "stubble", shirt: "#6a4c9c", hoodie: true },
+    look: { skin: "#c99068", hair: "#1f1816", style: "curlytop", beard: "full", glasses: true, shirt: "#6a4c9c", hoodie: true },
     intro: [
       { t: "Hey! A. A., lead front end. I keep the front end in one piece. Mostly.", mood: "smirk" },
       { t: "Your pull requests will come past me sooner or later. Small ones make me very happy.", mood: "happy" }],
@@ -323,7 +345,7 @@ const TEAM = [
       [{ t: "Component first, page second. That's the rule.", mood: "neutral" }],
       [{ t: "If the linter complains, the linter is right. Usually.", mood: "smirk" }]] },
   { id: "ea", name: "E. A.", role: "Front End Developer", area: [1, 6, 6, 6],
-    look: { skin: "#f1c6a2", hair: "#d8b25a", style: "short", beard: "none", glasses: true, shirt: "#e07a5f" },
+    look: { skin: "#b5764c", hair: "#1a1412", style: "short", beard: "none", glasses: true, shirt: "#e07a5f" },
     intro: [
       { t: "Hi, I'm E. A., front end developer. Welcome to the team!", mood: "happy" },
       { t: "Stuck getting the project running locally? Shout. Everyone gets stuck on day one.", mood: "neutral" }],
@@ -331,7 +353,7 @@ const TEAM = [
       [{ t: "Hot reload is the greatest invention of our time.", mood: "happy" }],
       [{ t: "CSS is easy, they said. Centre a div, they said.", mood: "smirk" }]] },
   { id: "ir", name: "I. R.", role: "Front End Developer · Remote", area: [10, 15, 6, 6],
-    look: { skin: "#a8714a", hair: "#2a201a", style: "buzz", beard: "none", shirt: "#d9a43a", robot: true },
+    look: { skin: "#a8693f", hair: "#1a1412", style: "short", beard: "none", shirt: "#d9a43a", robot: true },
     intro: [
       { t: "Hey, I'm I. R., front end. Good to have you here. Well, good to have my robot here.", mood: "happy" },
       { t: "Pro tip: clear the cache before you report a bug. Ask me how I know.", mood: "smirk" }],
@@ -340,7 +362,7 @@ const TEAM = [
       [{ t: "My browser has 47 tabs open. All of them are important.", mood: "smirk" }],
       [{ t: "Remote life: my commute is twelve steps and a coffee machine.", mood: "happy" }]] },
   { id: "jg", name: "J. G.", role: "Front End Developer", area: [1, 6, 9, 9],
-    look: { skin: "#eab48c", hair: "#6b4226", style: "short", beard: "stache", shirt: "#3d6fb0" },
+    look: { skin: "#6b4429", hair: "#141010", style: "shaved", beard: "full", shirt: "#3d6fb0" },
     intro: [
       { t: "Hello! J. G., front end developer. Nice to meet you.", mood: "happy" },
       { t: "First day tip: passwords go in the password manager. Not on a sticky note.", mood: "neutral" }],
@@ -348,7 +370,7 @@ const TEAM = [
       [{ t: "Read the error message. Then read it again. It's usually telling the truth.", mood: "neutral" }],
       [{ t: "Friday afternoon is for refactoring. Not for deploying.", mood: "smirk" }]] },
   { id: "pw", name: "P. W.", role: "Front End Developer · Remote", area: [10, 15, 9, 9],
-    look: { skin: "#f0c09a", hair: "#5a3a26", style: "curly", beard: "none", glasses: true, shirt: "#2f3a4a", hoodie: true, robot: true },
+    look: { skin: "#f0c09a", hair: "#6b4226", style: "short", beard: "full", shirt: "#2f3a4a", hoodie: true, robot: true },
     intro: [
       { t: "Hi, P. W., front end. Welcome!", mood: "happy" },
       { t: "Pairing is the fastest way to learn the codebase. Grab any of us, any time.", mood: "neutral" }],
@@ -357,7 +379,7 @@ const TEAM = [
       [{ t: "It's not a bug if we call it a feature. QA disagrees.", mood: "smirk" }],
       [{ t: "This robot's battery lasts longer than my patience in long meetings.", mood: "smirk" }]] },
   { id: "aw", name: "A. W.", role: "Front End Developer · Remote", area: [10, 15, 13, 13],
-    look: { skin: "#e9b896", hair: "#a0683a", style: "short", beard: "stubble", shirt: "#4a7fb0", robot: true },
+    look: { skin: "#f1c6a2", hair: "#a0683a", style: "buzz", beard: "none", shirt: "#4a7fb0", robot: true },
     intro: [
       { t: "Hi! A. W., front end developer. Calling in from home today. Well, every day.", mood: "happy" },
       { t: "If my robot bumps into you, blame the Wi-Fi. Not me.", mood: "smirk" }],
@@ -365,7 +387,7 @@ const TEAM = [
       [{ t: "Can you hear me? You're on mute. No wait, I'm on mute.", mood: "happy" }],
       [{ t: "My cat walked across the keyboard and approved a pull request. Kidding. Mostly.", mood: "smirk" }]] },
   { id: "sk", name: "S. K.", role: "Front End Developer", area: [1, 7, 12, 12],
-    look: { skin: "#f3c9a8", hair: "#6a2f2a", style: "long", beard: "none", shirt: "#5aa0c8", lashes: true },
+    look: { skin: "#b5764c", hair: "#1a1412", style: "long", beard: "none", shirt: "#5aa0c8", lashes: true },
     intro: [
       { t: "Hi! I'm S. K., front end developer. Great to have you on the team.", mood: "happy" },
       { t: "Ask questions early. Nobody expects you to know everything on your first day.", mood: "neutral" }],
@@ -373,7 +395,7 @@ const TEAM = [
       [{ t: "Mobile first, then everything else.", mood: "neutral" }],
       [{ t: "A good commit message is a gift to your future self.", mood: "happy" }]] },
   { id: "jjo", name: "J. O. J.", role: "Middleware Developer", area: [3, 6, 13, 16],
-    look: { skin: "#ecb995", hair: "#b5562f", style: "bald", beard: "full", glasses: true, shirt: "#6b7380" },
+    look: { skin: "#f0c4a0", hair: "#b5562f", style: "bald", beard: "neck", glasses: true, beanie: "#3f6b4a", wide: true, scruffy: true, shirt: "#8a8f99" },
     intro: [
       { t: "Hello, J. O. J., middleware. I connect the front end to everything behind it.", mood: "neutral" },
       { t: "When an API answers with something strange, come find me. I'm usually near the servers.", mood: "smirk" }],
@@ -381,7 +403,7 @@ const TEAM = [
       [{ t: "The front end calls me, I call the back end, the back end calls... someone.", mood: "smirk" }],
       [{ t: "A timeout is just the system asking for patience.", mood: "neutral" }]] },
   { id: "mr", name: "M. R.", role: "QA", area: [25, 28, 8, 12],
-    look: { skin: "#d9a07a", hair: "#1f1a1a", style: "short", beard: "none", glasses: true, shirt: "#a83a4a" },
+    look: { skin: "#f0c4a0", hair: "#e6c35a", style: "short", beard: "short", shirt: "#a83a4a" },
     intro: [
       { t: "Hi, M. R., QA. Welcome to the team!", mood: "happy" },
       { t: "My job is to find the bugs before the customers do. Please don't take it personally.", mood: "smirk" }],
@@ -389,7 +411,7 @@ const TEAM = [
       [{ t: "Steps to reproduce, expected result, actual result. In that order.", mood: "neutral" }],
       [{ t: "'Works on my machine' is not a test result.", mood: "smirk" }]] },
   { id: "sd", name: "S. D.", role: "QA", area: [18, 23, 15, 16],
-    look: { skin: "#f0c4a0", hair: "#4a3226", style: "short", beard: "stubble", shirt: "#3a6e5a" },
+    look: { skin: "#f0c4a0", hair: "#141018", style: "short", beard: "full", shirt: "#3a6e5a" },
     intro: [
       { t: "Hey! S. D., QA. Welcome aboard!", mood: "happy" },
       { t: "Between M. R. and me, nothing reaches production untested. Well, almost nothing.", mood: "smirk" }],
@@ -465,7 +487,7 @@ function Spr() {
 /* ---------- Game state ---------- */
 const state = { minutes: 9 * 60, tickAcc: 0, focus: 80, coffees: 0, met: [], introDone: false, questDone: false,
   serverPokes: 0, serverDead: false, golden: false, yogurtEaten: false, sick: 0, leaveTries: 0,
-  laptopOut: false, whips: 0, fiveDone: false, ended: false, standup: false };
+  laptopOut: false, whips: 0, fiveDone: false, ended: false, standup: false, temp: 21, tempT: 0 };
 const PLAYER_LOOK = { skin: "#f1c29a", hair: "#2b1f1a", style: "short", beard: "none", shirt: "#2f8f8a", lanyard: true };
 const player = { seated: false, hurt: 0, autoPath: null, x: 8 * T + 8, y: 19 * T - 2, dir: "up", step: 0, stepT: 0, moving: false, look: PLAYER_LOOK };
 
@@ -483,7 +505,10 @@ SB.crack = 0; SB.shout = 0;
 /* ---------- Effects: timers, particles, flash, screen shake ---------- */
 const timers = [];
 const after = (sec, fn) => timers.push({ t: sec, fn });
-const busy = () => timers.length > 0 || fade.on || !!player.autoPath || state.vamp === "approach" || state.vamp === "talk" || state.vamp === "escape" || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
+// "later" is for things that happen in the background; unlike "after" it never blocks the player
+const bgTimers = [];
+const later = (sec, fn) => bgTimers.push({ t: sec, fn });
+const busy = () => timers.length > 0 || !!state.bh || fade.on || !!state.deskScene || !!state.refactorScene || !!state.lairScene || !!state.mechScene || (!!state.ninja && state.ninja !== "gone") || !!player.onSofa || !!state.waking || !!player.autoPath || state.vamp === "approach" || state.vamp === "talk" || state.vamp === "escape" || !!player.jump || player.onTable || fx.puke > 0 || fx.ascend > 0 || state.ended
   || whip.phase === "coming" || whip.phase === "escort" || whip.phase === "rush";
 const whip = { phase: null, stuck: 0, next: 0 };
 const floaters = [];
@@ -512,6 +537,10 @@ function updateEffects(dt) {
   if (!dlg.open) for (let i = timers.length - 1; i >= 0; i--) {
     timers[i].t -= dt;
     if (timers[i].t <= 0) { const fn = timers[i].fn; timers.splice(i, 1); fn(); }
+  }
+  if (!dlg.open) for (let i = bgTimers.length - 1; i >= 0; i--) {
+    bgTimers[i].t -= dt;
+    if (bgTimers[i].t <= 0) { const fn = bgTimers[i].fn; bgTimers.splice(i, 1); fn(); }
   }
   // smouldering server wreck
   if (state.serverDead) {
@@ -589,6 +618,7 @@ function updateCutscene(dt) {
   }
 }
 function camFocus() {
+  if (state.camOverride) return state.camOverride;
   if (state.vamp === "escape" && typeof SD !== "undefined" && !SD.gone) return SD;
   return cut.phase === "notice" || cut.phase === "approach" ? SB : player;
 }
@@ -603,12 +633,30 @@ function drawDarkFloor(c, r, px, py) {
   if (r === MH - 3) F(px, py, T, 2, "rgba(0,0,0,.25)");
 }
 function floorStyle(c, r, ch) {
-  if (ch === "," || c >= 24) return "tile";
-  if (c >= 18 && c <= 23) return r < 11 ? "meet" : "wood";
-  return "carpet";
+  let st = ch === "," || c >= 24 ? "tile" : c >= 18 && c <= 23 ? (r < 11 ? "meet" : "wood") : "carpet";
+  if (state.rf && state.rf.theme) st = { tile: "wood", wood: "tile", carpet: "meet", meet: "carpet" }[st];
+  return st;
+}
+function rfSrc(c, r) {
+  const rf = state.rf;
+  if (!rf) return [c, r];
+  if (rf.desks && r >= 4 && r <= 11) { if (c >= 2 && c <= 5) return [c + 8, r]; if (c >= 10 && c <= 13) return [c - 8, r]; }
+  if (rf.board && r === 1) { if (c >= 8 && c <= 10) return [c + 3, r]; if (c >= 11 && c <= 13) return [c - 3, r]; }
+  return [c, r];
 }
 function drawFloor(c, r, px, py, ch) {
   const st = floorStyle(c, r, ch), n = hash(c, r);
+  if (ch === "h") {
+    if (c === 0) { F(px, py, T, T, "#8fd3f0"); F(px, py + 9, T, 7, "#4caf50"); F(px, py + 9, T, 1, "#7bd36a"); }
+    else { F(px, py, T, T, C.carpetA); }
+    F(px + 2, py + 3, 4, 3, "#b5a48c"); F(px + 9, py + 10, 3, 2, "#8a7a6a"); F(px + 11, py + 2, 2, 2, "#cfc4aa"); F(px + 5, py + 12, 2, 2, "#9a8a7a");
+    return;
+  }
+  if (ch === "q") {
+    F(px, py, T, T, "#2a2f3a"); F(px, py, T, 1, "#353b48"); F(px, py, 1, T, "#353b48");
+    if ((c + r) % 3 === 0) F(px + 7, py + 7, 2, 2, Math.floor(performance.now() / 500 + c) % 2 ? "#2fb8c9" : "#1f6f7a");
+    return;
+  }
   if (st === "carpet") {
     F(px, py, T, T, (c + r) & 1 ? C.carpetA : C.carpetB);
     for (let i = 0; i < 3; i++) F(px + ((n >>> (i * 8)) & 15), py + ((n >>> (i * 8 + 4)) & 15), 1, 1, C.carpetS);
@@ -638,8 +686,36 @@ function drawFloor(c, r, px, py, ch) {
     if (L && R) { F(px + 3, py + 6, 10, 1, "#f2c46d"); F(px + 3, py + 9, 10, 1, "#f2c46d"); F(px + 7, py + 6, 2, 4, "#f2c46d"); }
   }
 }
+function drawHall(c, r, px, py) {
+  F(px, py, T, T, (c + r) & 1 ? "#cfc7b6" : "#c6bead");
+  F(px, py, T, 1, "#ddd6c7");
+  if (c === 8) { F(px + 3, py, 10, T, "#9b3b30"); F(px + 3, py, 1, T, "#b5523c"); F(px + 12, py, 1, T, "#7a2a22"); }
+}
 function drawWall(c, r, px, py, ch) {
   if (ch === "z") return drawDarkFloor(c, r, px, py);
+  if (ch === "e") return drawHall(c, r, px, py);
+  if (ch === "D") {
+    // the open doorway: hallway floor inside a door frame
+    drawHall(c, r, px, py);
+    F(px, py, T, 3, "#8a6a4a"); F(px, py, T, 1, "#a07c57");
+    if (c === 7) { F(px, py, 3, T, "#6e4c31"); F(px, py, 1, T, C.out); }
+    if (c === 9) { F(px + 13, py, 3, T, "#6e4c31"); F(px + 15, py, 1, T, C.out); }
+    if (c === 8) { F(px + 3, py - 2, 10, 5, C.out); F(px + 4, py - 1, 8, 3, "#2fa84f"); F(px + 5, py, 6, 1, "#c8f5d2"); }
+    return;
+  }
+  if (ch === "E") {
+    // the lifts at the end of the hallway
+    F(px, py, T, T, C.wallFace); F(px, py + 13, T, 3, C.base);
+    if (c === 8) {
+      F(px + 1, py + 1, 14, 15, C.out); F(px + 2, py + 2, 12, 14, "#a9b2bc"); F(px + 2, py + 2, 12, 1, "#cfd6dd");
+      F(px + 7, py + 2, 2, 14, "#7d8894");
+      const t = Math.floor(performance.now() / 900) % 3;
+      F(px + 4, py - 3, 8, 3, C.out); F(px + 5, py - 2, 6, 1, t === 0 ? "#ffd25a" : "#6a5a3a");
+    } else {
+      F(px + (c === 7 ? 11 : 2), py + 6, 3, 5, "#7d8894"); F(px + (c === 7 ? 12 : 3), py + 7, 1, 1, "#ffd25a"); F(px + (c === 7 ? 12 : 3), py + 9, 1, 1, "#e9e4da");
+    }
+    return;
+  }
   if (ch === "G") {
     drawDarkFloor(c, r, px, py);
     F(px, py, T, T, "rgba(160,205,230,.24)");
@@ -666,7 +742,7 @@ function drawWall(c, r, px, py, ch) {
   F(px, py + 13, T, 3, C.base);
   F(px, py + 13, T, 1, "#a07c57");
 
-  if (ch === "w" && state.windowBroken && c === 13 && r === 1) {
+  if (ch === "w" && r === 1 && ((state.windowBroken && c === 13) || (state.ninjaWindow && c === 12))) {
     F(px + 1, py + 2, 14, 11, "#f2e6cf");
     F(px + 2, py + 3, 12, 9, "#1b2638");
     F(px + 2, py + 3, 3, 4, "#8fbcd6"); F(px + 11, py + 3, 3, 3, "#8fbcd6"); F(px + 2, py + 9, 2, 3, "#8fbcd6"); F(px + 12, py + 10, 2, 2, "#8fbcd6");
@@ -681,6 +757,7 @@ function drawWall(c, r, px, py, ch) {
     F(px + 7, py + 3, 2, 9, "#f2e6cf"); F(px + 2, py + 7, 12, 1, "#f2e6cf");
     F(px + 10, py + 9, 1, 1, "#d6ecf6"); F(px + 11, py + 8, 1, 1, "#d6ecf6");
     F(px + 1, py + 12, 14, 1, "#c9b48f");
+    if (state.temp < 21) { F(px + 2, py + 3, 3, 2, "#f4fbff"); F(px + 2, py + 5, 2, 2, "#e6f4fb"); F(px + 11, py + 10, 3, 2, "#f4fbff"); F(px + 12, py + 8, 2, 2, "#e6f4fb"); F(px + 2, py + 10, 2, 2, "#f4fbff"); }
   } else if (ch === "b" && at(c - 1, r) !== "b") {
     let n = 0; while (at(c + n, r) === "b") n++;
     const x = px + 1, y = py + 2, w = n * T - 2, h = 11;
@@ -705,6 +782,21 @@ function drawWall(c, r, px, py, ch) {
     const ma = ((m % 60) / 60) * Math.PI * 2, ha = (((m / 60) % 12) / 12) * Math.PI * 2;
     pline(px + 8, py + 7, Math.round(px + 8 + Math.sin(ma) * 3), Math.round(py + 7 - Math.cos(ma) * 3), C.out);
     pline(px + 8, py + 7, Math.round(px + 8 + Math.sin(ha) * 2), Math.round(py + 7 - Math.cos(ha) * 2), "#c0443b");
+  } else if (ch === "Q" || ch === "Y") {
+    F(px, py, T, T, "#232833"); F(px, py, T, 2, "#3a4150"); F(px, py + 13, T, 3, "#14181f");
+    F(px + 3, py + 4, 1, 8, "#2f3644"); F(px + 11, py + 4, 1, 8, "#2f3644");
+    if (ch === "Y") {
+      const first = at(c - 1, r) !== "Y";
+      F(px, py + 2, T, 10, "#0b1018"); if (first) F(px, py + 2, 1, 10, "#3a4150");
+      const t = performance.now() / 1000;
+      for (let i = 0; i < 3; i++) F(px + 2, py + 4 + i * 3, 4 + ((c * 5 + i * 7 + Math.floor(t * 2)) % 9), 1, i === 1 ? "#e9788a" : "#5fd35f");
+      if (Math.floor(t * 2) % 2 && first) F(px + 13, py + 3, 2, 2, "#ff3b3b");
+    }
+    if (c === 36 && state.alarmT > 0 && Math.floor(performance.now() / 150) % 2) F(px + 5, py + 3, 6, 5, "#ff3b3b");
+  } else if (ch === "H") {
+    F(px + 4, py + 3, 8, 10, C.out); F(px + 5, py + 4, 6, 8, "#e8e4da"); F(px + 5, py + 4, 6, 1, "#ffffff");
+    F(px + 6, py + 5, 4, 2, state.temp > 21 ? "#e9788a" : state.temp < 21 ? "#8fd6e8" : "#7fd1b9");
+    F(px + 7, py + 8, 2, 3, "#9aa3ad"); F(px + 7, py + 8, 2, 1, "#5a606c");
   } else if (ch === "R") {
     // mirror, with a tiny reflection when you stand in front of it
     F(px + 2, py + 1, 12, 12, C.out);
@@ -740,6 +832,7 @@ function drawDesk(c, r, px, py, time, mine) {
   F(px, py + 15, T, 1, C.deskDark);
   if (!L) F(px, py + 1, 1, 15, C.out);
   if (!R) F(px + 15, py + 1, 1, 15, C.out);
+  if (DESK_OWNERS[c + "," + (r + 1)]) { F(px + 5, py + 12, 6, 3, "#f7f3ea"); F(px + 6, py + 13, 4, 1, "#3a2316"); }
   if (mine) {
     if (state.laptopOut && state.retro) {
       F(px + 1, py - 6, 12, 12, C.out); F(px + 2, py - 5, 10, 10, "#d9d0bc");
@@ -903,6 +996,50 @@ function drawSofa(c, r, px, py) {
   if (!L) F(px + 1, py + 4, 3, 11, "#a24f61");
   if (!R) F(px + 12, py + 4, 3, 11, "#a24f61");
 }
+function drawTV(px, py, time) {
+  // a TV on a low stand, screen facing the sofa
+  F(px + 1, py + 9, 14, 6, C.out); F(px + 2, py + 10, 12, 4, "#6e4426"); F(px + 2, py + 10, 12, 1, "#8f5d34");
+  F(px + 1, py - 5, 14, 14, C.out); F(px + 2, py - 4, 12, 12, "#2b2f3a");
+  const sx = px + 3, sy = py - 3;
+  if (state.dream) {
+    for (let i = 0; i < 14; i++) F(sx + Math.floor(Math.random() * 10), sy + Math.floor(Math.random() * 9), 1, 1, Math.random() < 0.5 ? "#cfd5dc" : "#5a606c");
+    F(sx, sy, 10, 9, "rgba(120,130,140,.35)");
+  } else if (state.creditsT > 0) {
+    F(sx, sy, 10, 9, "#0b0a10");
+    const off = Math.floor(time * 6) % 12;
+    for (let i = 0; i < 4; i++) { const yy = sy + 9 - ((off + i * 3) % 12); if (yy >= sy && yy < sy + 9) F(sx + 2 + (i % 2), yy, 5 + (i % 3), 1, "#cfd5dc"); }
+  } else {
+    const flash = Math.floor(time * 3) % 7 === 0;
+    F(sx, sy, 10, 9, flash ? "#8fbf7a" : "#2a3a2a");
+    F(sx, sy + 6, 10, 3, "#1a241a");
+    const zx = Math.floor(time * 4) % 12;
+    F(sx + (zx % 10), sy + 3, 1, 3, "#6a9a5a"); F(sx + ((zx + 4) % 10), sy + 4, 1, 2, "#6a9a5a");
+  }
+  F(px + 7, py + 8, 2, 1, "#e9788a");
+}
+function drawPod(px, py, time) {
+  // tall glass capsule; the suit hangs inside until M. R. takes it
+  F(px, py - 18, T, 34, C.out);
+  F(px + 1, py + 10, 14, 6, "#3a4150"); F(px + 1, py - 17, 14, 4, "#3a4150");
+  const glow = 0.25 + Math.sin(time * 3) * 0.08;
+  F(px + 2, py - 13, 12, 23, "#123a44");
+  if (!state.suitTaken) {
+    F(px + 5, py - 11, 6, 6, "#2fb8c9"); F(px + 6, py - 9, 4, 3, "#bfefff"); F(px + 6, py - 9, 1, 1, "#ffffff");
+    F(px + 4, py - 5, 8, 8, "#2fb8c9"); F(px + 7, py - 3, 2, 2, "#f2a04b"); F(px + 5, py + 3, 2, 6, "#1f6f7a"); F(px + 9, py + 3, 2, 6, "#1f6f7a");
+  }
+  F(px + 2, py - 13, 12, 23, `rgba(140,230,255,${glow})`);
+  F(px + 3, py - 12, 1, 18, "rgba(255,255,255,.5)");
+}
+function drawBench(px, py, time) {
+  F(px, py + 1, T, 14, C.out); F(px + 1, py + 2, 14, 8, "#5a606c"); F(px + 1, py + 10, 14, 4, "#3a4150");
+  F(px + 3, py + 4, 4, 3, "#c9d0d6"); F(px + 9, py + 3, 3, 4, "#f7f3ea"); F(px + 9, py + 3, 3, 1, "#2fb8c9");
+  if (Math.floor(time * 5) % 6 === 0) F(px + 6, py + 2, 1, 1, "#ffd25a");
+}
+function drawPole(px, py) {
+  F(px + 2, py + 5, 12, 8, "#0b0a10"); F(px + 3, py + 6, 10, 6, "#000000");
+  F(px + 7, py - 30, 2, 40, "#d9b45a"); F(px + 7, py - 30, 1, 40, "#f2d68a");
+  F(px + 2, py + 4, 12, 1, "#ffd25a"); F(px + 2, py + 13, 12, 1, "#ffd25a");
+}
 function drawObject(ch, c, r, px, py, time) {
   switch (ch) {
     case "d": return drawDesk(c, r, px, py, time, false);
@@ -932,12 +1069,17 @@ function drawObject(ch, c, r, px, py, time) {
       }
       return;
     case "o": return drawSofa(c, r, px, py);
+    case "V": return drawTV(px, py, time);
+    case "U": return drawPod(px, py, time);
+    case "W": return drawBench(px, py, time);
+    case "I": return drawPole(px, py);
   }
 }
 
 /* ---------- Characters (world sprite) ---------- */
 function drawPerson(e) {
-  const L = state.retro && e !== player ? retroize(e.look) : e.look;
+  let L = state.retro && e !== player ? retroize(e.look) : e.look;
+  if (state.dream && e !== player) L = zombify(L);
   if (L.robot) return drawRobot(e);
   const x = Math.round(e.x), y = Math.round(e.y), mv = e.moving, st = e.step;
   const b = mv && (st & 1) ? -1 : 0;
@@ -951,8 +1093,9 @@ function drawPerson(e) {
 
   // a cape sits behind the body
   if (L.cape && dir !== "up") {
-    if (side) s.r(left ? x : x - 7, y - 15 + b, 7, 14, "#1a1420");
-    else { s.r(x - 8, y - 15 + b, 16, 14, "#1a1420"); s.r(x - 8, y - 18 + b, 3, 5, "#9b1b30"); s.r(x + 5, y - 18 + b, 3, 5, "#9b1b30"); }
+    const cc = L.capeCol || "#1a1420", ct = L.capeTrim || "#9b1b30";
+    if (side) s.r(left ? x : x - 7, y - 15 + b, 7, 14, cc);
+    else { s.r(x - 8, y - 15 + b, 16, 14, cc); s.r(x - 8, y - 18 + b, 3, 5, ct); s.r(x + 5, y - 18 + b, 3, 5, ct); }
   }
   // long hair sits behind the body
   if (L.style === "long") {
@@ -967,14 +1110,19 @@ function drawPerson(e) {
     s.r(x - 4, y - 6, 3, 6 - a, pants); s.r(x + 1, y - 6, 3, 6 - c, pants);
     s.d(x - 4, y - 2 - a, 3, 2, shoes); s.d(x + 1, y - 2 - c, 3, 2, shoes);
   }
-  s.r(x - 5, y - 14 + b, 10, 9, L.shirt);
-  s.d(x - 5, y - 6 + b, 10, 1, shirt2);
-  if (!side) {
+  const bw = L.wide ? 2 : 0;
+  s.r(x - 5 - bw, y - 14 + b, 10 + bw * 2, 9 + (L.wide ? 1 : 0), L.shirt);
+  s.d(x - 5 - bw, y - 6 + b + (L.wide ? 1 : 0), 10 + bw * 2, 1, shirt2);
+  if (!side && L.zombie) {
+    // arms stretched out in front
+    s.r(x - 7 - bw, y - 13 + b, 2, 3, L.shirt); s.r(x + 5 + bw, y - 13 + b, 2, 3, L.shirt);
+    s.d(x - 6, y - 11 + b, 3, 2, L.skin); s.d(x + 3, y - 11 + b, 3, 2, L.skin);
+  } else if (!side) {
     const la = sw > 0 ? 1 : 0, ra = sw < 0 ? 1 : 0;
-    s.r(x - 7, y - 13 + b + la, 2, 5, L.shirt); s.r(x - 7, y - 8 + b + la, 2, 2, L.skin);
-    s.r(x + 5, y - 13 + b + ra, 2, 5, L.shirt); s.r(x + 5, y - 8 + b + ra, 2, 2, L.skin);
+    s.r(x - 7 - bw, y - 13 + b + la, 2, 5, L.shirt); s.r(x - 7 - bw, y - 8 + b + la, 2, 2, L.skin);
+    s.r(x + 5 + bw, y - 13 + b + ra, 2, 5, L.shirt); s.r(x + 5 + bw, y - 8 + b + ra, 2, 2, L.skin);
   }
-  if (L.cape && dir === "up") { s.r(x - 7, y - 16 + b, 14, 15, "#1a1420"); s.d(x - 6, y - 16 + b, 12, 1, "#9b1b30"); }
+  if (L.cape && dir === "up") { s.r(x - 7, y - 16 + b, 14, 15, L.capeCol || "#1a1420"); s.d(x - 6, y - 16 + b, 12, 1, L.capeTrim || "#9b1b30"); }
   s.r(x - 5, y - 23 + b, 10, 9, L.skin);
 
   const H = L.hair;
@@ -991,6 +1139,28 @@ function drawPerson(e) {
         else s.r(left ? x + 1 : x - 7, hy + 3, 6, 6, H);
       }
       break;
+    case "shaved":
+      break;
+    case "crop": {
+      const fc = mixHex(L.skin, H, 0.62);
+      if (dir === "up") s.d(x - 5, hy + 1, 10, 8, fc);
+      else {
+        s.d(x - 5, hy + 1, 10, 2, fc);
+        if (dir === "down") { s.d(x - 5, hy + 3, 1, 2, fc); s.d(x + 4, hy + 3, 1, 2, fc); }
+        else s.d(left ? x + 1 : x - 5, hy + 3, 4, 3, fc);
+      }
+      break;
+    }
+    case "curlytop": {
+      const fc = mixHex(L.skin, H, 0.55);
+      if (dir === "up") { s.r(x - 6, hy - 1, 12, 6, H); s.d(x - 5, hy + 5, 10, 3, fc); }
+      else {
+        s.r(x - 6, hy - 1, 12, 4, H);
+        if (dir === "down") { s.d(x - 5, hy + 3, 1, 3, fc); s.d(x + 4, hy + 3, 1, 3, fc); }
+        else s.d(left ? x + 1 : x - 5, hy + 3, 4, 4, fc);
+      }
+      break;
+    }
     case "bald":
       if (dir === "down") { s.r(x - 6, hy + 5, 1, 3, H); s.r(x + 5, hy + 5, 1, 3, H); }
       else if (dir === "up") s.r(x - 5, hy + 5, 10, 3, H);
@@ -1004,6 +1174,23 @@ function drawPerson(e) {
         else s.r(left ? x + 1 : x - 6, hy + 3, 5, 10, H);
       }
       break;
+    case "helmet": {
+      s.r(x - 6, hy - 1, 12, 11, H);
+      if (dir === "down") { s.d(x - 4, hy + 3, 8, 6, "#f2a04b"); s.d(x - 3, hy + 4, 6, 4, "#bfefff"); s.d(x - 2, hy + 5, 2, 2, C.out); s.d(x + 1, hy + 5, 2, 2, C.out); s.d(x - 3, hy + 4, 1, 1, "#ffffff"); }
+      else if (dir !== "up") { s.d(left ? x - 6 : x + 1, hy + 3, 5, 5, "#f2a04b"); s.d(left ? x - 5 : x + 2, hy + 4, 3, 3, "#bfefff"); }
+      s.d(x - 1, hy - 3, 2, 2, "#f2a04b");
+      if (dir === "down") { s.d(x - 2, y - 13 + b, 4, 3, "#f2a04b"); s.d(x - 1, y - 12 + b, 1, 1, "#ffffff"); s.d(x, y - 11 + b, 1, 1, "#ffffff"); s.d(x + 1, y - 12 + b, 1, 1, "#ffffff"); }
+      break;
+    }
+    case "ninja": {
+      const band = "#d6453a", eyeSkin = "#e8c4a0";
+      s.r(x - 6, hy, 12, 10, H);
+      if (dir === "down") { s.d(x - 4, hy + 4, 8, 2, eyeSkin); s.d(x - 3, hy + 4, 1, 1, C.out); s.d(x + 2, hy + 4, 1, 1, C.out); s.d(x - 6, hy + 2, 12, 1, band); }
+      else if (dir === "up") { s.d(x - 6, hy + 2, 12, 1, band); s.d(x - 1, hy + 3, 1, 4, band); s.d(x + 1, hy + 3, 1, 3, band); }
+      else { s.d(left ? x - 6 : x + 1, hy + 4, 5, 2, eyeSkin); s.d(left ? x - 5 : x + 4, hy + 4, 1, 1, C.out); s.d(x - 6, hy + 2, 12, 1, band); s.d(left ? x + 6 : x - 8, hy + 2, 2, 1, band); s.d(left ? x + 7 : x - 9, hy + 3, 1, 2, band); }
+      if (L.sword) { s.d(dir === "left" ? x - 7 : x + 4, y - 18 + b, 1, 9, "#c9d0d6"); s.d(dir === "left" ? x - 8 : x + 3, y - 18 + b, 3, 1, "#8a5a33"); }
+      break;
+    }
     case "vamp":
       if (dir === "up") s.r(x - 6, hy, 12, 9, H);
       else {
@@ -1036,7 +1223,24 @@ function drawPerson(e) {
         else s.r(left ? x + 1 : x - 6, hy + 3, 5, 5, H);
       }
   }
-  if (L.style === "bald" && dir !== "up") s.d(x - 2, hy + 2, 3, 1, shade(L.skin, 1.12));
+  if ((L.style === "bald" || L.style === "shaved") && dir !== "up" && !L.cap && !L.beanie) s.d(x - 2, hy + 2, 3, 1, shade(L.skin, 1.12));
+  if (L.beanie) {
+    // knitted beanie with a folded band
+    const bn = L.beanie, band = shade(bn, 0.78);
+    s.r(x - 6, hy - 2, 12, 6, bn); s.r(x - 4, hy - 3, 8, 1, bn);
+    if (dir === "up") s.d(x - 6, hy + 2, 12, 2, band);
+    else { s.d(x - 6, hy + 2, 12, 2, band); for (let i = -5; i < 6; i += 2) s.d(x + i, hy + 2, 1, 2, shade(bn, 0.65)); }
+    s.d(x - 3, hy - 1, 3, 1, shade(bn, 1.2));
+  }
+  if (L.cap) {
+    // baseball cap: crown over the head, brim pointing the way they face
+    const cap2 = shade(L.cap, 0.72);
+    s.r(x - 6, hy - 1, 12, 4, L.cap);
+    if (dir === "down") { s.r(x - 6, hy + 3, 12, 1, cap2); s.d(x - 1, hy, 2, 2, "#ffffff"); }
+    else if (dir === "left") s.r(x - 9, hy + 2, 5, 2, cap2);
+    else if (dir === "right") s.r(x + 4, hy + 2, 5, 2, cap2);
+    else s.d(x - 2, hy + 2, 4, 1, cap2);
+  }
 
   if (side) {
     const ax = x - 1 + (left ? -sw : sw);
@@ -1050,6 +1254,10 @@ function drawPerson(e) {
     if (L.soot) { s.d(x - 4, y - 18 + b, 1, 1, "#3a3030"); s.d(x + 2, y - 21 + b, 2, 1, "#3a3030"); s.d(x - 5, y - 11 + b, 2, 2, "#3a3030"); s.d(x + 3, y - 8 + b, 1, 1, "#3a3030"); }
     if (L.lanyard) { s.d(x - 1, y - 14 + b, 1, 4, "#e9d36a"); s.d(x - 2, y - 10 + b, 3, 3, "#f4f1e8"); s.d(x - 2, y - 10 + b, 3, 1, "#2f8f8a"); }
     if (L.beard === "full") { s.d(x - 4, y - 17 + b, 8, 3, H); s.d(x - 5, y - 19 + b, 1, 3, H); s.d(x + 4, y - 19 + b, 1, 3, H); s.d(x - 1, y - 16 + b, 2, 1, "#7a3a32"); }
+    if (L.beard === "short") { s.d(x - 4, y - 16 + b, 8, 2, H); s.d(x - 5, y - 18 + b, 1, 2, H); s.d(x + 4, y - 18 + b, 1, 2, H); s.d(x - 1, y - 16 + b, 2, 1, "#7a3a32"); }
+    if (L.beard === "goatee") { s.d(x - 2, y - 17 + b, 4, 1, H); s.d(x - 1, y - 16 + b, 2, 2, H); }
+    if (L.beard === "neck") { s.d(x - 4, y - 15 + b, 8, 1, H); s.d(x - 3, y - 14 + b, 6, 2, H); s.d(x - 1, y - 16 + b, 2, 1, shade(L.skin, 0.82)); }
+    if (L.scruffy) { s.d(x - 3 - bw, y - 9 + b, 2, 1, "#c9a44a"); s.d(x + 2, y - 11 + b, 1, 1, "#7a5a3a"); s.d(x - 5 - bw, y - 5 + b, 3, 1, shade(L.shirt, 0.6)); }
     if (L.beard === "stubble") s.d(x - 3, y - 16 + b, 6, 2, shade(L.skin, 0.85));
     if (L.glasses) {
       s.d(x - 5, ey - 1, 4, 3, fr); s.d(x + 1, ey - 1, 4, 3, fr); s.d(x - 1, ey - 1, 2, 1, fr);
@@ -1059,9 +1267,13 @@ function drawPerson(e) {
     if (L.beard === "stache") s.d(x - 2, y - 16 + b, 4, 1, H);
     else if (e.scream) { s.d(x - 2, y - 17 + b, 4, 3, "#5a2420"); s.d(x - 1, y - 17 + b, 2, 1, "#f7f3ea"); }
     else if (L.beard === "none" || !L.beard) s.d(x - 1, y - 16 + b, 2, 1, shade(L.skin, 0.82));
+    if (L.style === "shaved" && !L.cap) { s.d(x - 3, hy + 1, 2, 1, shade(L.skin, 1.25)); }
     if (L.fangs) { s.d(x - 2, y - 16 + b, 1, 1, "#ffffff"); s.d(x + 1, y - 16 + b, 1, 1, "#ffffff"); }
   } else if (side) {
     if (L.beard === "full") s.d(left ? x - 5 : x - 1, y - 17 + b, 6, 3, H);
+    if (L.beard === "short") s.d(left ? x - 5 : x - 1, y - 16 + b, 6, 2, H);
+    if (L.beard === "goatee") s.d(left ? x - 5 : x + 2, y - 16 + b, 3, 2, H);
+    if (L.beard === "neck") s.d(left ? x - 4 : x - 2, y - 15 + b, 6, 2, H);
     if (L.beard === "stubble") s.d(left ? x - 5 : x, y - 16 + b, 5, 2, shade(L.skin, 0.85));
     if (L.glasses) {
       s.d(left ? x - 6 : x + 2, ey - 1, 4, 3, fr); s.d(left ? x - 5 : x + 3, ey, 2, 1, lens);
@@ -1072,7 +1284,8 @@ function drawPerson(e) {
   s.draw(g);
 }
 function drawRobot(e) {
-  const L = state.retro ? retroize(e.look) : e.look;
+  let L = state.retro ? retroize(e.look) : e.look;
+  if (state.dream) L = zombify(L);
   const x = Math.round(e.x), y = Math.round(e.y), dir = e.dir;
   const side = dir === "left" || dir === "right", left = dir === "left";
   const roll = e.moving ? (e.step & 1) : 0;
@@ -1115,16 +1328,17 @@ function drawRobot(e) {
   F(sx + 3, sy + 2, 6, 7, sk);
   if (L.style === "curly") { F(sx + 2, sy + 1, 8, 2, H); F(sx + 2, sy + 3, 1, 2, H); F(sx + 9, sy + 3, 1, 2, H); }
   else if (L.style === "buzz") F(sx + 3, sy + 2, 6, 1, H);
-  else if (L.style !== "bald") { F(sx + 3, sy + 1, 6, 2, H); F(sx + 2, sy + 2, 1, 2, H); F(sx + 9, sy + 2, 1, 2, H); }
+  else if (L.style !== "bald" && L.style !== "shaved") { F(sx + 3, sy + 1, 6, 2, H); F(sx + 2, sy + 2, 1, 2, H); F(sx + 9, sy + 2, 1, 2, H); }
   if (L.glasses) { F(sx + 3, sy + 4, 6, 1, "#3a2a2a"); }
   F(sx + 4, sy + 5, 1, 1, C.out); F(sx + 7, sy + 5, 1, 1, C.out);
-  if (L.beard === "stubble" || L.beard === "full") F(sx + 4, sy + 7, 4, 1, shade(sk, 0.82));
+  if (L.beard === "full") { F(sx + 3, sy + 6, 6, 3, H); F(sx + 5, sy + 7, 2, 1, "#7a3a32"); }
+  else if (L.beard === "stubble") F(sx + 4, sy + 7, 4, 1, shade(sk, 0.82));
   else F(sx + 5, sy + 7, 2, 1, shade(sk, 0.78));
   // scanline shimmer
   const scan = Math.floor(performance.now() / 120) % 10;
   F(sx, sy + scan, 12, 1, "rgba(255,255,255,.12)");
 }
-const onPhone = n => n.def.id === "ps" && !n.gone && !state.vamp && !state.met.includes("ps") && !n.caught && !n.hop;
+const onPhone = n => n.def.id === "ps" && !n.gone && !n.voided && !state.bh && !state.void && !state.vamp && !state.dream && !state.met.includes("ps") && !n.caught && !n.hop;
 function drawPhoneInHands(e) {
   const x = Math.round(e.x), y = Math.round(e.y - (e.lift || 0));
   const glow = ["#7fd1e8", "#f6d65b", "#b48ee0", "#7ccf6a"][Math.floor(performance.now() / 300) % 4];
@@ -1138,10 +1352,19 @@ function mixHex(a, b, t) {
   const ch = s => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
   return "#" + [16, 8, 0].map(s => ch(s).toString(16).padStart(2, "0")).join("");
 }
-function drawBody(n) {
+function drawBody(n, alive) {
   const L = n.look, x = Math.round(n.x), y = Math.round(n.y);
   F(x - 11, y - 1, 22, 3, "rgba(20,10,20,.22)");
   const s = Spr();
+  if (L.robot && n.split) {
+    // sliced clean in half: two halves lying apart, a few sparks
+    s.r(x - 12, y - 9, 6, 10, "#2b2f3a"); s.d(x - 11, y - 8, 4, 8, "#14181f");
+    s.r(x - 6, y - 4, 4, 2, "#9aa3ad"); s.r(x - 9, y - 1, 5, 2, "#3a3f4a");
+    s.r(x + 3, y - 4, 4, 2, "#9aa3ad"); s.r(x + 6, y - 9, 6, 10, "#2b2f3a"); s.d(x + 7, y - 8, 4, 8, "#14181f"); s.r(x + 5, y - 1, 6, 2, "#3a3f4a");
+    s.draw(g);
+    if (Math.floor(performance.now() / 180 + n.x) % 5 === 0) { F(x - 3, y - 6, 1, 1, "#f2c46d"); F(x + 2, y - 4, 1, 1, "#ffffff"); }
+    return;
+  }
   if (L.robot) {
     // robot tipped over on its side, screen dark
     s.r(x - 10, y - 6, 5, 7, "#3a3f4a");
@@ -1152,20 +1375,21 @@ function drawBody(n) {
     s.draw(g);
     return;
   }
-  const pale = mixHex(L.skin, "#d8dde6", 0.55), pants = L.pants || "#3b4a6b";
+  const pale = alive ? L.skin : mixHex(L.skin, "#d8dde6", 0.55), pants = L.pants || "#3b4a6b";
   // lying on their back, head to the left
   if (L.style === "long") s.r(x - 13, y - 7, 4, 9, L.hair);
   s.r(x - 3, y - 6, 8, 7, L.shirt);
   s.r(x + 5, y - 5, 6, 5, pants);
   s.r(x + 11, y - 5, 2, 2, "#2a2230"); s.r(x + 11, y - 2, 2, 2, "#2a2230");
   s.r(x - 10, y - 6, 7, 7, pale);
-  if (L.style !== "bald") s.r(x - 11, y - 6, 2, 7, L.hair);
+  if (L.style !== "bald" && L.style !== "shaved") s.r(x - 11, y - 6, 2, 7, L.cap || L.beanie || L.hair);
   s.d(x - 2, y - 1, 6, 1, shade(L.shirt, 0.78));
   s.d(x - 8, y - 4, 1, 1, C.out); s.d(x - 8, y - 1, 1, 1, C.out);
   if (L.glasses) { s.d(x - 9, y - 5, 3, 1, "#3a2a2a"); s.d(x - 9, y - 2, 3, 1, "#3a2a2a"); }
-  if (L.beard === "full") s.d(x - 5, y - 5, 2, 5, L.hair);
-  s.d(x - 4, y - 4, 1, 1, "#9b1b30"); s.d(x - 4, y - 2, 1, 1, "#9b1b30");
+  if (L.beard && L.beard !== "none" && L.beard !== "stubble") s.d(x - 5, y - 5, 2, 5, L.hair);
+  if (!alive) { s.d(x - 4, y - 4, 1, 1, "#9b1b30"); s.d(x - 4, y - 2, 1, 1, "#9b1b30"); }
   s.draw(g);
+  if (alive) return;
   // dizzy stars circling the head
   const t = performance.now() / 300 + n.x;
   F(x - 7 + Math.round(Math.cos(t) * 4), y - 10 + Math.round(Math.sin(t) * 2), 1, 1, "#fff3b0");
@@ -1187,7 +1411,7 @@ function drawStickyFace(L, x, y, dir) {
   // hair scribble
   if (L.style === "curly") { F(sx + 2, sy + 2, 1, 1, ink); F(sx + 4, sy + 1, 1, 1, ink); F(sx + 6, sy + 2, 1, 1, ink); F(sx + 8, sy + 1, 1, 1, ink); F(sx + 9, sy + 3, 1, 1, ink); }
   else if (L.style === "buzz") F(sx + 3, sy + 2, 6, 1, ink);
-  else if (L.style !== "bald") { F(sx + 3, sy + 1, 6, 1, ink); F(sx + 2, sy + 2, 1, 2, ink); F(sx + 9, sy + 2, 1, 2, ink); }
+  else if (L.style !== "bald" && L.style !== "shaved") { F(sx + 3, sy + 1, 6, 1, ink); F(sx + 2, sy + 2, 1, 2, ink); F(sx + 9, sy + 2, 1, 2, ink); }
   // face outline
   F(sx + 3, sy + 3, 6, 1, ink); F(sx + 3, sy + 9, 6, 1, ink); F(sx + 2, sy + 4, 1, 5, ink); F(sx + 9, sy + 4, 1, 5, ink);
   if (L.glasses) { F(sx + 3, sy + 5, 2, 2, ink); F(sx + 7, sy + 5, 2, 2, ink); F(sx + 5, sy + 5, 2, 1, ink); }
@@ -1281,7 +1505,7 @@ function drawStickyPortrait(L, mood) {
   // hair
   if (L.style === "curly") for (const [x, y] of [[13, 11], [16, 9], [20, 8], [24, 8], [28, 9], [31, 11], [34, 14]]) line(x, y, 3, 2);
   else if (L.style === "buzz") line(15, 12, 18, 2);
-  else if (L.style !== "bald") { line(14, 10, 20, 2); line(12, 12, 2, 6); line(34, 12, 2, 6); line(17, 12, 6, 2); }
+  else if (L.style !== "bald" && L.style !== "shaved") { line(14, 10, 20, 2); line(12, 12, 2, 6); line(34, 12, 2, 6); line(17, 12, 6, 2); }
   // head outline
   line(15, 14, 18, 2); line(15, 34, 18, 2); line(13, 16, 2, 18); line(33, 16, 2, 18);
   // eyes, glasses
@@ -1294,6 +1518,39 @@ function drawStickyPortrait(L, mood) {
   if (L.beard === "stubble" || L.beard === "full") for (const [x, y] of [[17, 31], [19, 33], [27, 33], [30, 31], [23, 33]]) line(x, y, 1, 1);
   // a hurried signature line
   line(9, 39, 10, 1); line(18, 38, 3, 1);
+}
+function drawSuitPortrait(mood) {
+  const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  const teal = "#2fb8c9", teal2 = "#1f8a98", orange = "#f2a04b";
+  P(0, 0, 48, 48, "#123a44");
+  for (let i = 0; i < 6; i++) P(i * 8 + 2, 0, 1, 48, "rgba(140,230,255,.12)");
+  const s = Spr();
+  s.r(3, 30, 8, 18, orange); s.r(37, 30, 8, 18, orange);
+  s.r(5, 38, 38, 10, teal); s.r(9, 34, 30, 5, teal);
+  s.r(10, 5, 28, 30, teal); s.r(14, 2, 20, 4, teal); s.r(22, 0, 4, 3, orange);
+  s.draw(pg);
+  P(10, 30, 28, 4, teal2);
+  // giant magnifying-glass visor: the eyes look enormous through it
+  P(13, 11, 22, 18, orange); P(15, 13, 18, 14, "#bfefff");
+  if (mood === "happy") { P(17, 19, 5, 2, C.out); P(26, 19, 5, 2, C.out); }
+  else { P(17, 16, 5, 7, "#ffffff"); P(26, 16, 5, 7, "#ffffff"); P(18, 18, 3, 4, C.out); P(27, 18, 3, 4, C.out); }
+  P(15, 13, 3, 2, "#ffffff");
+  P(20, 39, 8, 6, orange); P(22, 42, 1, 1, "#ffffff"); P(23, 43, 1, 1, "#ffffff"); P(24, 42, 1, 1, "#ffffff"); P(25, 41, 1, 1, "#ffffff");
+}
+function drawNinjaPortrait(mood) {
+  const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  const cloth = "#1a1a22", cloth2 = "#2a2a36", band = "#d6453a", skin = "#e8c4a0";
+  const s = Spr();
+  s.r(5, 40, 38, 8, cloth); s.r(9, 36, 30, 5, cloth);
+  s.r(11, 6, 26, 30, cloth); s.r(14, 3, 20, 4, cloth);
+  s.r(36, 12, 8, 3, band); s.r(39, 15, 6, 3, band);
+  s.draw(pg);
+  P(30, 0, 3, 40, "#c9d0d6"); P(28, 2, 7, 2, "#8a5a33");
+  P(11, 12, 26, 4, band); P(11, 12, 26, 1, "#e9788a");
+  P(13, 19, 22, 7, skin);
+  if (mood === "angry") { P(14, 19, 8, 2, cloth); P(26, 19, 8, 2, cloth); P(17, 21, 3, 2, C.out); P(28, 21, 3, 2, C.out); }
+  else { P(17, 21, 3, 3, C.out); P(28, 21, 3, 3, C.out); P(17, 21, 1, 1, "#ffffff"); P(28, 21, 1, 1, "#ffffff"); }
+  for (const [x, y] of [[15, 30], [24, 33], [31, 29], [12, 42], [34, 44]]) P(x, y, 3, 1, cloth2);
 }
 function drawCatPortrait(mood) {
   const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
@@ -1321,6 +1578,9 @@ function drawPortrait(L, mood) {
   pg.clearRect(0, 0, 48, 48);
   const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
   if (L.cat) return drawCatPortrait(mood);
+  if (L.style === "ninja") return drawNinjaPortrait(mood);
+  if (L.style === "helmet") return drawSuitPortrait(mood);
+  if (L.lion) return drawLionPortrait(mood);
   if (L.robot && L.retro) return drawStickyPortrait(L, mood);
   if (L.robot) { P(0, 0, 48, 48, "#24485c"); P(0, 0, 48, 12, "#2a5268"); }
   if (L.aura) {
@@ -1333,15 +1593,20 @@ function drawPortrait(L, mood) {
   const s = Spr();
   if (L.style === "long") s.r(9, 9, 30, 33, H);
   if (L.cape) { s.r(3, 26, 9, 22, "#9b1b30"); s.r(36, 26, 9, 22, "#9b1b30"); }
-  s.r(5, 41, 38, 7, L.shirt); s.r(9, 37, 30, 5, L.shirt);
+  if (L.wide) { s.r(1, 39, 46, 9, L.shirt); s.r(4, 35, 40, 6, L.shirt); }
+  else { s.r(5, 41, 38, 7, L.shirt); s.r(9, 37, 30, 5, L.shirt); }
   s.r(19, 31, 10, 7, skin);
-  s.r(12, 10, 24, 20, skin); s.r(14, 30, 20, 3, skin); s.r(17, 33, 14, 2, skin);
+  if (L.wide) { s.r(11, 10, 26, 21, skin); s.r(12, 30, 24, 4, skin); s.r(15, 33, 18, 3, skin); }
+  else { s.r(12, 10, 24, 20, skin); s.r(14, 30, 20, 3, skin); s.r(17, 33, 14, 2, skin); }
   if (L.style !== "long") { s.r(10, 19, 2, 6, skin); s.r(36, 19, 2, 6, skin); }
   switch (L.style) {
     case "long": s.r(11, 5, 26, 8, H); s.r(9, 8, 5, 22, H); s.r(34, 8, 5, 22, H); s.r(15, 3, 18, 3, H); break;
     case "buzz": s.r(12, 6, 24, 6, H); s.r(11, 10, 2, 7, H); s.r(35, 10, 2, 7, H); break;
     case "curly": s.r(9, 3, 30, 10, H); s.r(7, 7, 5, 12, H); s.r(36, 7, 5, 12, H); s.r(12, 1, 8, 3, H); s.r(22, 0, 8, 4, H); s.r(31, 2, 6, 3, H); break;
     case "bald": s.r(9, 15, 4, 8, H); s.r(35, 15, 4, 8, H); break;
+    case "shaved": break;
+    case "crop": s.r(12, 7, 24, 4, skin); break;
+    case "curlytop": s.r(11, 2, 26, 10, H); s.r(13, 0, 8, 3, H); s.r(24, 0, 8, 3, H); break;
     case "vamp": s.r(11, 5, 26, 6, H); s.r(9, 8, 4, 9, H); s.r(35, 8, 4, 9, H); s.r(15, 3, 18, 3, H); break;
     case "spiky":
       s.r(11, 5, 26, 8, H);
@@ -1351,6 +1616,8 @@ function drawPortrait(L, mood) {
     default: s.r(11, 5, 26, 7, H); s.r(9, 8, 4, 11, H); s.r(35, 8, 4, 11, H); s.r(14, 3, 8, 3, H); s.r(25, 3, 9, 3, H);
   }
   if (L.beard === "full") { s.r(12, 26, 24, 7, H); s.r(15, 33, 18, 4, H); }
+  if (L.beard === "short") { s.r(13, 27, 22, 5, H); s.r(16, 32, 16, 2, H); }
+  if (L.beard === "neck") { s.r(12, 33, 24, 4, H); s.r(15, 37, 18, 2, H); }
   s.draw(pg);
 
   // clothes
@@ -1371,6 +1638,21 @@ function drawPortrait(L, mood) {
       P(11, 11, 26, 3, H); P(16, 13, 4, 1, H2); P(29, 13, 4, 1, H2);
       break;
     case "bald": P(18, 12, 6, 1, shade(skin, 1.12)); P(20, 13, 3, 1, shade(skin, 1.12)); break;
+    case "shaved": P(16, 12, 8, 1, shade(skin, 1.25)); P(18, 13, 4, 1, shade(skin, 1.25)); break;
+    case "crop": {
+      const fc = mixHex(skin, H, 0.62);
+      P(12, 7, 24, 6, fc); P(12, 13, 2, 6, fc); P(34, 13, 2, 6, fc);
+      for (let yy = 8; yy < 13; yy += 2) for (let xx = 13 + (yy % 4); xx < 35; xx += 3) P(xx, yy, 1, 1, H);
+      break;
+    }
+    case "curlytop": {
+      const fc = mixHex(skin, H, 0.5);
+      P(12, 12, 2, 7, fc); P(34, 12, 2, 7, fc);
+      for (const [x, y] of [[13, 4], [18, 2], [24, 1], [30, 3], [16, 8], [27, 7], [21, 6], [33, 8]]) P(x, y, 2, 2, H2);
+      for (const [x, y] of [[15, 3], [26, 2]]) P(x, y, 2, 1, hi);
+      P(12, 11, 24, 2, H); P(16, 13, 4, 1, H2); P(28, 13, 4, 1, H2);
+      break;
+    }
     case "vamp":
       P(12, 11, 8, 2, H); P(28, 11, 8, 2, H); P(20, 11, 8, 3, H); P(22, 14, 4, 2, H); P(23, 16, 2, 1, H);
       P(16, 6, 6, 1, shade(H, 2.2)); P(27, 6, 5, 1, shade(H, 2.2));
@@ -1386,8 +1668,27 @@ function drawPortrait(L, mood) {
       P(16, 6, 4, 1, hi); P(27, 5, 4, 1, hi);
   }
 
+  if (L.beanie) {
+    const bn = L.beanie, band = shade(bn, 0.78);
+    P(10, 0, 28, 16, C.out); P(11, 1, 26, 14, bn); P(14, 0, 20, 1, C.out);
+    for (let xx = 13; xx < 36; xx += 3) P(xx, 2, 1, 9, shade(bn, 0.88));
+    P(9, 10, 30, 6, C.out); P(10, 11, 28, 4, band);
+    for (let xx = 11; xx < 38; xx += 2) P(xx, 11, 1, 4, shade(bn, 0.65));
+    P(14, 2, 6, 2, shade(bn, 1.2));
+  }
+  if (L.cap) {
+    const cap2 = shade(L.cap, 0.72);
+    P(10, 1, 28, 12, C.out); P(11, 2, 26, 10, L.cap); P(13, 3, 8, 2, shade(L.cap, 1.2));
+    P(7, 11, 34, 4, C.out); P(8, 12, 32, 2, cap2);
+    P(22, 5, 4, 4, "#ffffff"); P(23, 6, 2, 2, L.cap);
+  }
+  if (L.scruffy) {
+    P(15, 25, 6, 1, shade(skin, 0.8)); P(27, 25, 6, 1, shade(skin, 0.8));
+    P(12, 40, 4, 3, "#c9a44a"); P(30, 43, 3, 2, "#7a5a3a"); P(22, 45, 2, 2, "#c9a44a");
+    if (!L.beanie && !L.cap) { P(17, 11, 1, 2, H); P(30, 10, 1, 3, H); }
+  }
   // brows
-  const brow = L.style === "bald" ? H : H2;
+  const brow = L.style === "bald" || L.style === "shaved" ? H : H2;
   if (mood === "shock") { P(15, 14, 7, 1, brow); P(26, 14, 7, 1, brow); }
   else if (mood === "angry") { P(14, 15, 3, 1, brow); P(17, 16, 3, 1, brow); P(20, 17, 3, 1, brow); P(25, 17, 3, 1, brow); P(28, 16, 3, 1, brow); P(31, 15, 3, 1, brow); }
   else { P(15, 17, 7, 1, brow); P(26, mood === "smirk" ? 16 : 17, 7, 1, brow); }
@@ -1416,6 +1717,13 @@ function drawPortrait(L, mood) {
     for (let y = 28; y < 35; y += 2) for (let x = 15 + (y % 4); x < 33; x += 3) P(x, y, 1, 1, shade(skin, 0.8));
   } else if (L.beard === "stache") {
     P(18, 28, 12, 2, H); P(17, 30, 2, 1, H); P(29, 30, 2, 1, H);
+  } else if (L.beard === "short") {
+    P(18, 28, 12, 2, H); for (const [x, y] of [[15, 29], [31, 29], [22, 33]]) P(x, y, 2, 1, H2);
+  } else if (L.beard === "goatee") {
+    P(18, 28, 12, 2, H); P(20, 32, 8, 4, H); P(21, 36, 6, 1, H); P(22, 33, 1, 1, H2);
+  } else if (L.beard === "neck") {
+    for (const [x, y] of [[14, 34], [19, 37], [26, 36], [31, 34], [23, 39]]) P(x, y, 1, 2, H2);
+    for (let x = 15; x < 33; x += 3) P(x, 31, 1, 1, shade(skin, 0.82));
   }
   if (mood === "shock") { P(22, 30, 4, 3, "#5a2420"); P(23, 30, 2, 1, "#7a3a32"); }
   else if (mood === "angry") { P(20, 30, 8, 4, "#5a2420"); P(21, 30, 6, 1, "#f7f3ea"); P(22, 33, 4, 1, "#b5584a"); }
@@ -1564,10 +1872,18 @@ function npcLines(n) {
     if (d.id === "sb") return [say(d, "I asked you to settle in. Not to ascend.", "neutral")];
     return [say(d, GOLD_REACT[(state.goldReacts = (state.goldReacts || 0) + 1) % GOLD_REACT.length], "neutral")];
   }
+  if (d.id === "mr" && state.met.includes("mr") && !state.lairDone && !state.lairScene && !state.vamp && !state.dream && !state.ninja && !state.retro && !state.standup && !whip.phase) return lairOffer(d);
+  if (d.id === "aa" && state.met.includes("aa") && !state.refactored && !state.vamp && !state.dream && !state.ninja && !state.retro && !state.standup && !whip.phase) return refactorOffer(d);
   if (state.standup && !n.didStandup && state.met.includes(d.id)) {
     n.didStandup = true;
     const pool = STANDUP_LINES[standupGroup(d)];
     return [say(d, pool[Math.floor(Math.random() * pool.length)], d.id === "sb" ? "smirk" : "neutral")];
+  }
+  if (state.temp !== 21 && state.met.includes(d.id) && d.id !== "sb" && Math.random() < 0.7) {
+    const hot = state.temp > 21;
+    if (d.look.robot) return [say(d, hot ? TEMP_LINES.robotHot : TEMP_LINES.robotCold, "neutral")];
+    const pool = hot ? TEMP_LINES.hot : TEMP_LINES.cold;
+    return [say(d, pool[Math.floor(Math.random() * pool.length)], "neutral")];
   }
   if (state.retro && state.met.includes(d.id)) {
     if (d.look.robot) return [say(d, ROBOT_RETRO, "neutral")];
@@ -1622,9 +1938,9 @@ function brewCoffee() {
 
 /* Big moments happen on top of the kitchen table, away from the HUD in the corner */
 const TABLE_TOP = [27 * T, 6 * T + 8];
-function jumpTo(tx, ty, done) {
+function jumpTo(tx, ty, done, dur, h) {
   keys.clear();
-  player.jump = { sx: player.x, sy: player.y, tx, ty, t: 0, dur: 0.55, h: 18, done };
+  player.jump = { sx: player.x, sy: player.y, tx, ty, t: 0, dur: dur || 0.55, h: h === undefined ? 18 : h, done };
   player.dir = ty < player.y ? "up" : "down";
 }
 function jumpOnTable(done) {
@@ -1745,7 +2061,13 @@ const LEAVE_LINES = [
 function checkLeave() {
   if (cut.phase !== "done" || dlg.open || busy() || whip.phase) return;
   const c = Math.floor(player.x / T), r = Math.floor((player.y - 2) / T);
+  if (state.mechGone && c === 0 && at(c, r) === "h") return endMech("hole");
+  if (state.void || state.bh) return;
   if (at(c, r) !== "M" || player.dir !== "down") return;
+  if (state.mechGone) return endMech("door");
+  if (state.dream) return;
+  if (state.ninja === "gone") return endNinja();
+  if (state.ninja) return;
   if (state.vamp === "gone") return endVampire();
   if (state.vamp) return;
   if (state.minutes >= 17 * 60) return endDay();
@@ -1771,7 +2093,7 @@ function stand() {
   player.dir = "down";
 }
 function tryStand() {
-  if (state.vamp) { stand(); return; }
+  if (state.vamp || state.ninja) { stand(); return; }
   if (whip.phase === "guard") { if (SB.crack <= 0) crack("SIT."); keys.clear(); return; }
   if (whip.phase) { keys.clear(); return; }
   if (state.questDone && state.minutes < 17 * 60) {
@@ -1871,6 +2193,7 @@ function endDay() {
   if (metCount() >= TOTAL) titles.push("Team Player");
   if (cat.pets >= 5) titles.push("Cat Person");
   if (state.timeTraveled) titles.push("Y2K Survivor");
+  if ((state.thermoIncidents || 0) >= 2) titles.push("Thermostat Vandal");
   if (!titles.length) titles.push("Survived Day One");
   const rows = [
     ["Team members met", `${metCount()}/${TOTAL}`],
@@ -1880,6 +2203,7 @@ function endDay() {
     ["Escape attempts", state.leaveTries],
     ["Whip cracks taken", state.whips],
     ["Times MAUI was petted", cat.pets],
+    ["Thermostat incidents", state.thermoIncidents || 0],
   ];
   showEnd("End of Day 1", titles, rows, "Play again");
 }
@@ -1945,7 +2269,12 @@ function showHint(text) {
 }
 
 /* ---------- Movement & collision ---------- */
+function solidAt(x, y) {
+  const pts = [[x - 5, y - 5], [x + 4, y - 5], [x - 5, y - 1], [x + 4, y - 1]];
+  return pts.some(([px, py]) => solid(at(Math.floor(px / T), Math.floor(py / T))));
+}
 function blockedAt(x, y, self, ghost) {
+  if (state.void) return x < 8 || y < 8 || x > MW * T - 8 || y > MH * T - 2;
   const pts = [[x - 5, y - 5], [x + 4, y - 5], [x - 5, y - 1], [x + 4, y - 1]];
   for (const [px, py] of pts) if (solid(at(Math.floor(px / T), Math.floor(py / T)))) return true;
   for (const o of chars) {
@@ -1992,10 +2321,10 @@ function updatePlayer(dt) {
     stepAnim(player, dt);
     return;
   }
-  if (player.onTable) { player.moving = false; stepAnim(player, dt); return; }
+  if (player.onTable || player.onSofa) { player.moving = false; stepAnim(player, dt); return; }
   if (player.autoPath) {
     const [tx, ty] = player.autoPath[0];
-    const dx = tx - player.x, dy = ty - player.y, sp = 70 * dt;
+    const dx = tx - player.x, dy = ty - player.y, sp = (player.autoSpeed || 70) * dt;
     if (Math.abs(dy) > 0.5) { player.y += Math.sign(dy) * Math.min(Math.abs(dy), sp); player.dir = dy < 0 ? "up" : "down"; player.moving = true; }
     else if (Math.abs(dx) > 0.5) { player.x += Math.sign(dx) * Math.min(Math.abs(dx), sp); player.dir = dx < 0 ? "left" : "right"; player.moving = true; }
     else {
@@ -2006,9 +2335,12 @@ function updatePlayer(dt) {
         if (cb) cb();
       }
     }
+    if (player.carrier) { const cr = player.carrier; cr.x = player.x; cr.y = player.y + 6; cr.dir = player.dir; cr.moving = true; stepAnim(cr, dt); player.moving = false; }
     stepAnim(player, dt);
     return;
   }
+  if (player.borrowSeat) { player.moving = false; stepAnim(player, dt); return; }
+  if (player.hold) { player.moving = false; stepAnim(player, dt); return; }
   if (player.seated) {
     player.moving = false; player.dir = "up";
     if (!dlg.open && !busy() && (keys.size || stickVec.x || stickVec.y)) tryStand();
@@ -2040,6 +2372,29 @@ function updateNpc(n, dt) {
   if (n.gone) {
     if (n.body && !n.look.robot && Math.random() < dt * 0.3) floater("z", n.x - 8, n.y - 12, "#dfe7f2");
     return;
+  }
+  if (state.dream) { updateZombie(n, dt); return; }
+  if (state.bh || state.void) { stepAnim(n, dt); return; }
+  if (n.air && state.ninja !== "leap" && state.ninja !== "escape") {
+    const a = n.air; a.t += dt;
+    const k = Math.min(1, a.t / a.dur);
+    n.x = a.sx + (a.tx - a.sx) * k; n.y = a.sy + (a.ty - a.sy) * k; n.lift = Math.sin(k * Math.PI) * a.h; n.moving = false;
+    if (k >= 1) { n.air = null; n.lift = 0; if (a.done) a.done(); }
+    stepAnim(n, dt); return;
+  }
+  if (state.deskScene && n === state.deskOwner && !n.path) { n.moving = false; stepAnim(n, dt); return; }
+  if (state.lairScene && !n.path && !n.air) { n.moving = false; stepAnim(n, dt); return; }
+  if (state.mechScene && !n.path && !n.air) {
+    if (n.hop > 0) { n.hop = Math.max(0, n.hop - dt); n.lift = Math.sin((1 - n.hop / 0.45) * Math.PI) * 7; } else n.lift = 0;
+    if (n.caught > 0) n.caught = Math.max(0, n.caught - dt);
+    n.moving = false; if (state.mech) n.dir = facingTo(n, state.mech); stepAnim(n, dt); return;
+  }
+  if (state.refactorScene && !n.path) { if (n.hop > 0) { n.hop = Math.max(0, n.hop - dt); n.lift = Math.sin((1 - n.hop / 0.45) * Math.PI) * 7; } else n.lift = 0; if (n.caught > 0) n.caught = Math.max(0, n.caught - dt); n.moving = false; stepAnim(n, dt); return; }
+  if (state.ninja && state.ninja !== "gone") {
+    if (n === JOJn) { updateNinja(n, dt); return; }
+    n.moving = false; n.path = null; n.target = null;
+    if (!JOJn.gone && !JOJn.hidden) n.dir = facingTo(n, JOJn);
+    stepAnim(n, dt); return;
   }
   if (state.vamp) {
     if (n === SD) { updateVamp(n, dt); return; }
@@ -2122,9 +2477,11 @@ const RETRO_LINES = [
 const ROBOT_RETRO = "Video calls haven't been invented yet, so I drew my face on a sticky note. Close enough.";
 let hDayModern = "";
 const fade = { on: false, t: 0, mid: null, done: null, midDone: false };
-function fadeThrough(title, sub, mid, done) {
+function fadeThrough(title, sub, mid, done, dark) {
   document.getElementById("fadeDay").textContent = title;
   document.getElementById("fadeSub").textContent = sub;
+  fadeEl.style.background = dark ? "#0b0a10" : "";
+  document.getElementById("fadeDay").style.color = dark ? "#cfd5dc" : "";
   fadeEl.hidden = false; fadeEl.style.opacity = 0;
   Object.assign(fade, { on: true, t: 0, mid, done, midDone: false });
   keys.clear(); player.moving = false;
@@ -2213,6 +2570,1020 @@ function stayIn1999() {
       ["Times MAUI was petted", cat.pets],
     ], "Start over");
   });
+}
+
+/* ---------- The black hole and the Great Lion ---------- */
+const HOLE = [1, 4];
+const HOLE_X = HOLE[0] * T + 8, HOLE_Y = HOLE[1] * T + 8;
+const LION_WHO = { name: "The Great Lion", role: "Keeper of Fresh Starts", look: { lion: true } };
+const SCREAMS_BH = ["AAAH!", "My PR!", "Noooo!", "Not before the retro!", "I had UNSAVED CHANGES!", "Tell my manager I tried!"];
+function dotOffer() {
+  if (!state.introDone || state.vamp || state.dream || state.ninja || whip.phase || state.standup || player.seated || state.mechScene) return openDialog([{ t: "A tiny black dot on the carpet. Probably a coffee stain." }]);
+  openDialog([{ t: "There's a tiny, perfectly round black dot on the carpet. It's very, very black. It almost seems to... hum.", choices: [
+    { label: "Poke it", fn: blackHoleStart },
+    { label: "Leave it alone", fn: () => {} },
+  ] }]);
+}
+function blackHoleStart() {
+  state.bhUsed = true; keys.clear(); player.moving = false;
+  const pull = [...npcs.filter(n => (!n.gone || n.body) && !n.hidden), ...outsiders, cat];
+  for (const e of pull) { e.bhDelay = Math.hypot(e.x - HOLE_X, e.y - HOLE_Y) / 55 + 1.6; e.bhGo = false; e.path = null; e.target = null; e.air = null; }
+  state.bh = { t: 0, r: 2, eatR: 0, pull, protect: new Set(), held: null };
+  state.eaten = new Set();
+  C.void = "#0b0a14";
+  floater("*bloop*", HOLE_X, HOLE_Y - 10, "#d9c8ff");
+  fx.shake = 0.3;
+  // sprint down to the server rack and hang on to it
+  for (const k of ["1,13", "1,14", "2,14", "1,15", "2,15"]) state.bh.protect.add(k);
+  later(0.5, () => {
+    floater("THE SERVER!", player.x, player.y - 32, "#ffffff");
+    player.autoSpeed = 140;
+    walkPlayerTo(1, 13, () => {
+      player.autoSpeed = 0;
+      player.hold = true; player.dir = "down";
+      floater("HOLD ON!!", player.x, player.y - 34, "#fff3b0");
+    });
+  });
+}
+function updateBlackHole(dt) {
+  const bh = state.bh;
+  if (!bh || dlg.open) return;
+  bh.t += dt;
+  bh.r = Math.min(16, 2 + bh.t * 8);
+  fx.shake = Math.max(fx.shake, Math.min(0.5, 0.1 + bh.t * 0.03));
+  // swirling sparks spiralling inwards
+  for (let i = 0; i < 3; i++) {
+    const a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 70;
+    burst(1, HOLE_X + Math.cos(a) * d, HOLE_Y + Math.sin(a) * d, { angle: a + Math.PI + 0.9, spread: 0.2, speed: [50, 90], life: [0.4, 0.8], size: [1, 2], colors: ["#7b4fd1", "#b48ee0", "#e2408f", "#ffffff"], fade: true });
+  }
+  // people, robots, other teams and the cat get pulled in, nearest first
+  for (const e of bh.pull) {
+    if (e.voided || bh.t < e.bhDelay) continue;
+    if (!e.bhGo) {
+      e.bhGo = true;
+      floater(e === cat ? "MRROOOW?!" : SCREAMS_BH[Math.floor(Math.random() * SCREAMS_BH.length)], e.x, e.y - 30, "#ffffff");
+    }
+    const dx = HOLE_X - e.x, dy = HOLE_Y - e.y, d = Math.max(1, Math.hypot(dx, dy));
+    const v = 30 + (bh.t - e.bhDelay) * 45;
+    e.x += (dx / d * v - dy / d * v * 0.6) * dt;
+    e.y += (dy / d * v + dx / d * v * 0.6) * dt;
+    e.dir = ["down", "left", "up", "right"][Math.floor(bh.t * 10 + d) % 4];
+    e.moving = false; e.lift = 0;
+    if (d < 9) {
+      e.voided = true; e.hidden = true;
+      burst(10, HOLE_X, HOLE_Y, { speed: [20, 50], life: [0.2, 0.5], size: [1, 2], colors: ["#b48ee0", "#ffffff"], fade: true });
+    }
+  }
+  // the building itself gets eaten from the hole outwards
+  if (bh.t > 2.2 && player.hold) {
+    bh.eatR += dt * 2.3;
+    for (let r = 0; r < MH; r++) for (let c = 0; c < MW; c++) {
+      const key = c + "," + r;
+      if (state.eaten.has(key) || bh.protect.has(key)) continue;
+      if (Math.hypot(c - HOLE[0], r - HOLE[1]) > bh.eatR) continue;
+      if (c >= OFFICE_W && !state.lairOpen) { state.eaten.add(key); continue; }
+      state.eaten.add(key);
+      if (Math.random() < 0.35) {
+        const tx = c * T + 8, ty = r * T + 8, a = Math.atan2(HOLE_Y - ty, HOLE_X - tx);
+        burst(2, tx, ty, { angle: a, spread: 0.4, speed: [60, 120], life: [0.4, 0.9], size: [2, 3], colors: [C.carpetA, C.wallFace, C.deskTop, C.wallTop, "#4caf50"], fade: true });
+      }
+    }
+  }
+  const allIn = bh.pull.every(e => e.voided);
+  if (allIn && bh.eatR > 46 && !bh.final) {
+    bh.final = true;
+    floater("MY FINGERS ARE SLIPPING!", player.x, player.y - 34, "#ffb3a8");
+    later(1.6, () => {
+      for (const k of bh.protect) state.eaten.add(k);
+      fx.flash = 1; fx.flashRGB = "255,255,255"; fx.shake = 0;
+      state.bh = null; state.void = true; C.void = "#ffffff";
+      player.hold = false; player.dir = "down";
+      parts.length = 0;
+      after(1.2, () => openDialog([
+        { t: "...Silence." },
+        { t: "The office is gone. The building is gone. The whole city is gone. There's only white, in every direction." },
+        { t: "It's surprisingly peaceful. No tickets. No meetings. No Slack notifications." },
+      ], () => later(2.5, lionArrives)));
+    });
+  }
+}
+/* A swirling portal: opens, lets the lion out (or you in), closes */
+function openPortal(x, y, reset) {
+  x = Math.max(28, Math.min(MW * T - 28, x));
+  state.portal = { x, y, s: 0, phase: "open", reset: !!reset, t: 0 };
+  floater("*VWOOOM*", x, y - 40, "#d9c8ff");
+  fx.shake = 0.3;
+}
+function lionArrives() {
+  const side = player.x + 70 > MW * T - 28 ? -1 : 1;
+  openPortal(player.x + 70 * side, player.y, false);
+  state.lionSide = side;
+}
+function updatePortal(dt) {
+  const P = state.portal;
+  if (!P || dlg.open) return;
+  P.t += dt;
+  for (let i = 0; i < 2; i++) {
+    const a = Math.random() * Math.PI * 2;
+    burst(1, P.x + Math.cos(a) * 12 * P.s, P.y - 14 + Math.sin(a) * 18 * P.s, { angle: a + Math.PI, spread: 0.3, speed: [10, 25], life: [0.4, 0.8], size: [1, 2], colors: ["#b48ee0", "#7fd1e8", "#ffd25a", "#ffffff"], fade: true });
+  }
+  if (P.phase === "open") {
+    P.s = Math.min(1, P.s + dt * 1.4);
+    if (P.s >= 1) {
+      P.phase = "idle";
+      if (!P.reset) {
+        // out steps the lion
+        state.lion = { x: P.x, y: P.y, dir: state.lionSide > 0 ? "left" : "right", step: 0, stepT: 0, moving: true, sit: false };
+        floater("*soft paws*", P.x, P.y - 34, "#c9a46e");
+        burst(20, P.x, P.y - 14, { speed: [20, 60], life: [0.5, 1], size: [1, 2], colors: ["#ffd25a", "#ffffff", "#b48ee0"], fade: true });
+      } else showHint("Walk into the portal.");
+    }
+  } else if (P.phase === "idle") {
+    if (!P.reset && state.lion && Math.abs(state.lion.x - P.x) > 22) P.phase = "close";
+    if (P.reset && !P.used && Math.hypot(player.x - P.x, player.y - P.y) < 11) {
+      P.used = true; player.hidden = true; keys.clear();
+      burst(30, P.x, P.y - 14, { speed: [20, 70], life: [0.5, 1.1], size: [1, 2], colors: ["#ffd25a", "#ffffff", "#b48ee0", "#7fd1e8"], fade: true });
+      floater("*WHOOSH*", P.x, P.y - 40, "#fff3b0");
+      later(0.6, () => fadeThrough("A new day", "Let's try that again...", () => {
+        try { sessionStorage.setItem("ol-skip-intro", "1"); } catch (e) {}
+        try { location.reload(); } catch (e) {}
+      }, null));
+    }
+  } else if (P.phase === "close") {
+    P.s = Math.max(0, P.s - dt * 1.6);
+    if (P.s <= 0) { state.portal = null; floater("*pop*", P.x, P.y - 20, "#d9c8ff"); }
+  }
+}
+function drawPortal() {
+  const P = state.portal; if (!P || P.s <= 0) return;
+  const cx = Math.round(P.x), cy = Math.round(P.y - 14), t = performance.now() / 1000;
+  const oval = (a, b, c) => { if (a < 1 || b < 1) return; g.fillStyle = c; for (let dy = -b; dy <= b; dy++) { const w = Math.floor(a * Math.sqrt(1 - (dy * dy) / (b * b))); g.fillRect(cx - w, cy + dy, w * 2 + 1, 1); } };
+  const s = P.s;
+  oval(Math.round(16 * s), Math.round(22 * s), "rgba(180,142,224,.25)");
+  oval(Math.round(13 * s), Math.round(19 * s), C.out);
+  oval(Math.round(12 * s), Math.round(18 * s), "#ffd25a");
+  oval(Math.round(10 * s), Math.round(16 * s), "#7b4fd1");
+  oval(Math.round(8 * s), Math.round(13 * s), "#7fd1e8");
+  oval(Math.round(5 * s), Math.round(9 * s), "#e9f6ff");
+  for (let i = 0; i < 8; i++) {
+    const a = t * 3 + i * 0.785, rr = 0.55 + 0.35 * ((i % 3) / 2);
+    F(Math.round(cx + Math.cos(a) * 9 * s * rr), Math.round(cy + Math.sin(a) * 14 * s * rr), 1, 1, i % 2 ? "#ffffff" : "#ffd25a");
+  }
+}
+function updateLion(dt) {
+  const L = state.lion;
+  if (!L) return;
+  if (!L.sit) {
+    const tx = player.x + 30 * (state.lionSide || 1), ty = player.y;
+    const dx = tx - L.x, dy = ty - L.y, d = Math.hypot(dx, dy);
+    if (d < 2) { L.sit = true; L.moving = false; L.dir = "down"; floater("*sits*", L.x, L.y - 34, "#c9a46e"); showHint("A lion. In the void. Maybe say hello."); }
+    else { L.x += dx / d * 42 * dt; L.y += dy / d * 42 * dt; L.dir = dx < 0 ? "left" : "right"; L.moving = true; }
+  }
+  stepAnim(L, dt);
+}
+function drawLion() {
+  const L = state.lion; if (!L) return;
+  const x = Math.round(L.x), y = Math.round(L.y);
+  const fur = "#d9a548", fur2 = "#b8862f", mane = "#9a5a22", mane2 = "#7a4418", nose = "#4a2a1a";
+  F(x - 12, y - 1, 24, 3, "rgba(20,10,20,.18)");
+  if (L.sit) {
+    disc(x, y - 7, 8, C.out); disc(x, y - 7, 7, fur);
+    F(x - 6, y - 3, 4, 3, fur2); F(x + 2, y - 3, 4, 3, fur2);
+    disc(x, y - 19, 10, C.out); disc(x, y - 19, 9, mane); disc(x, y - 21, 6, mane2);
+    disc(x, y - 18, 6, C.out); disc(x, y - 18, 5, fur);
+    F(x - 3, y - 20, 2, 2, C.out); F(x + 2, y - 20, 2, 2, C.out);
+    F(x - 2, y - 16, 5, 3, "#f0d8a0"); F(x - 1, y - 16, 3, 1, nose); F(x, y - 15, 1, 2, nose);
+    F(x + 7, y - 5, 6, 2, fur2); F(x + 12, y - 7, 3, 3, mane);
+    return;
+  }
+  const f = L.dir === "left" ? -1 : 1, leg = L.moving ? (L.step & 1) : 0;
+  const X = (dx, w) => f > 0 ? x + dx : x - dx - w;
+  F(X(-15, 2), y - 13, 2, 6, fur2); F(X(-17, 4), y - 15, 4, 3, mane);
+  F(X(-11, 18), y - 13, 18, 9, C.out); F(X(-10, 16), y - 12, 16, 7, fur); F(X(-10, 16), y - 7, 16, 2, fur2);
+  for (const [lx, up] of [[-9, leg], [-5, 1 - leg], [2, leg], [5, 1 - leg]]) { F(X(lx, 3), y - 6, 3, 6 - up, C.out); F(X(lx, 2), y - 5, 2, 5 - up, fur2); }
+  disc(f > 0 ? x + 8 : x - 8, y - 16, 8, C.out); disc(f > 0 ? x + 8 : x - 8, y - 16, 7, mane);
+  disc(f > 0 ? x + 10 : x - 10, y - 15, 5, C.out); disc(f > 0 ? x + 10 : x - 10, y - 15, 4, fur);
+  F(X(11, 2), y - 17, 2, 2, C.out); F(X(13, 2), y - 14, 2, 2, nose);
+}
+function drawLionPortrait(mood) {
+  const P = (x, y, w, h, c) => { pg.fillStyle = c; pg.fillRect(x, y, w, h); };
+  const D = (cx, cy, r, c) => { pg.fillStyle = c; for (let dy = -r; dy <= r; dy++) { const w = Math.floor(Math.sqrt(r * r - dy * dy + r * 0.6)); pg.fillRect(cx - w, cy + dy, w * 2 + 1, 1); } };
+  P(0, 0, 48, 48, "#fffaf0");
+  D(24, 24, 23, C.out); D(24, 24, 22, "#9a5a22");
+  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; D(Math.round(24 + Math.cos(a) * 17), Math.round(24 + Math.sin(a) * 17), 4, i % 2 ? "#7a4418" : "#b06a2a"); }
+  D(24, 26, 14, C.out); D(24, 26, 13, "#d9a548");
+  D(13, 14, 4, "#d9a548"); D(35, 14, 4, "#d9a548"); D(13, 14, 2, "#7a4418"); D(35, 14, 2, "#7a4418");
+  if (mood === "happy") { P(16, 23, 5, 2, C.out); P(27, 23, 5, 2, C.out); }
+  else { P(17, 21, 4, 4, "#f2c94c"); P(27, 21, 4, 4, "#f2c94c"); P(18, 22, 2, 3, C.out); P(28, 22, 2, 3, C.out); }
+  D(24, 33, 6, "#f0d8a0"); P(21, 28, 6, 3, "#4a2a1a"); P(23, 31, 2, 3, "#4a2a1a"); P(20, 35, 3, 1, "#4a2a1a"); P(25, 35, 3, 1, "#4a2a1a");
+}
+function lionTalk() {
+  const W = LION_WHO;
+  openDialog([
+    say(W, "Do not be afraid, little one.", "neutral"),
+    say(W, "You poked the dot. Everyone always pokes the dot.", "happy"),
+    { who: W, mood: "neutral", t: "I have seen many first days. This one was... certainly one of them. What do you wish?", choices: [
+      { label: "Please reset the day", fn: lionReset },
+      { label: "Who are you?", fn: () => openDialog([
+        say(W, "I am the Great Lion. I appear whenever someone deletes everything.", "neutral"),
+        say(W, "You would be surprised how often that happens in IT.", "happy"),
+      ]) },
+      { label: "Can I pet you?", fn: () => { floater("*purr*", state.lion.x, state.lion.y - 34, "#ffd0dc"); openDialog([{ t: "The Great Lion allows it. He purrs like a server room at full load." }]); } },
+    ] },
+  ]);
+}
+function lionReset() {
+  openDialog([
+    say(LION_WHO, "Then let the day begin anew.", "happy"),
+    say(LION_WHO, "Step through the portal, little one. And this time... maybe don't poke the dot.", "neutral"),
+  ], () => {
+    floater("ROAR! (gently)", state.lion.x, state.lion.y - 38, "#fff3b0");
+    fx.shake = 0.6;
+    later(0.7, () => {
+      // open it on the free side of the player, away from the lion; never right on top of them
+      const side = state.lionSide || 1;
+      const spots = [player.x - 56 * side, player.x + 96 * side, player.x - 96 * side];
+      const x = spots.find(v => v > 40 && v < MW * T - 40) ?? player.x + 60;
+      openPortal(x, player.y, true);
+    });
+  });
+}
+
+/* ---------- The meeting-room mech (secret ending) ---------- */
+const MECH_TILES = new Set(["20,4", "21,4", "20,5", "21,5", "20,3", "21,3", "19,4", "19,5", "22,4", "22,5", "20,6", "21,6"]);
+const MECH_SHOUTS = ["SCOPE CREEEEP!", "ALL TICKETS ARE PRIORITY ONE!", "WHO MOVED MY DEADLINE?!", "THIS MEETING COULD HAVE BEEN AN EMAIL!", "STAKEHOLDERS, ASSEMBLE!"];
+function mechOffer() {
+  const PS = npcById("ps");
+  if (!state.introDone || !PS || PS.gone || state.vamp || state.dream || state.ninja || state.retro || state.standup || whip.phase || state.mechGone) return openDialog([{ t: INFO.c[0] }]);
+  openDialog([{ t: "Look at the meeting table from above: two chairs on top like a head, chairs on each side like arms, two at the bottom like legs... It looks like a giant robot taking a nap.", choices: [
+    { label: "Shout \"TRANSFORM!\"", fn: mechStart },
+    { label: "Leave it", fn: () => {} },
+  ] }]);
+}
+function mechStart() {
+  const PS = npcById("ps");
+  const PILOT = { ...PS.def, role: "Pilot · Meeting-Room Mech" };
+  state.mechScene = true; keys.clear(); player.moving = false;
+  PS.path = null; PS.target = null; PS.ghostAll = true;
+  play([
+    [0.1, () => { floater("TRANSFORM!", player.x, player.y - 34, "#fff3b0"); fx.shake = 0.2; }],
+    [0.5, () => { PS.hop = 0.45; PS.caught = 1.6; }],
+    [0.8, talk(PS, "Did someone say... TRANSFORM?!", "shock")],
+    [0.2, next => {
+      if (Math.abs(PS.x - 21 * T) < 4 * T && Math.abs(PS.y - 5 * T) < 4 * T) return next();
+      PS.speed = 80; sendNpc(PS, 23, 7, () => { PS.speed = undefined; next(); }); return "wait";
+    }],
+    [0.2, next => { floater("Hup!", PS.x, PS.y - 34); PS.air = { sx: PS.x, sy: PS.y, tx: 21 * T, ty: 5 * T + 6, t: 0, dur: 0.5, h: 22, done: next }; return "wait"; }],
+    [0.1, () => { PS.lie = true; PS.hidden = true; PS.x = 21 * T + 2; PS.y = 5 * T + 6; floater("*lies down*", PS.x, PS.y - 18, "#ffffff"); }],
+    [0.9, narrate("P. S. lies down flat on his back on the meeting table... and slowly sinks into it, like it's a cockpit.")],
+    [0.1, () => {
+      PS.lie = false; floater("*CLUNK*", 21 * T, 4 * T, "#ffd25a"); fx.shake = 0.4;
+      state.mechOut = true;
+      state.mech = { x: 21 * T, y: 7 * T - 2, stand: 0, phase: "flat", t: 0, moving: false, stompT: 0, shoutT: 0, laser: 0, lx: 0, ly: 0 };
+      state.camOverride = { x: 21 * T, y: 5 * T };
+    }],
+    [0.6, next => { state.mech.phase = "rise"; state.mech.cb = next; return "wait"; }],
+    [0.3, talk({ def: PILOT }, "BEHOLD! THE MEETING-ROOM MECH!", "happy")],
+    [0.2, talk({ def: PILOT }, "Every chair a weapon! Every agenda item... PRIORITY ONE!", "angry")],
+    [0.1, next => { const m = state.mech; m.phase = "berserk"; m.t = 0; m.cb = next; return "wait"; }],
+    [0.1, next => { const m = state.mech; m.phase = "walk"; m.t = 0; m.cb = next; return "wait"; }],
+    [0.6, narrate("The meeting-room mech smashes through the outer wall and stomps off into the city, P. S. cackling in the cockpit.")],
+    [0.1, narrate("Somewhere, a stakeholder's calendar invite gets declined. Forcefully.")],
+    [0.1, narrate("Well. That's probably enough office for one day.")],
+    [0.1, () => {
+      state.mech = null; state.mechScene = false; state.mechGone = true; state.camOverride = null;
+      PS.gone = true; PS.hidden = false; PS.ghostAll = false;
+      showHint("Time to go home: through the door, or through the big hole in the wall.");
+    }],
+  ]);
+}
+function flingAway(e, m) {
+  if (e.air || e.gone || (e === player && player.jump)) return;
+  const dy = e.y >= m.y ? 26 : -26;
+  if (e === player) { jumpTo(player.x, player.y + dy, null, 0.5, 14); floater("WHOA!", player.x, player.y - 30); return; }
+  e.air = { sx: e.x, sy: e.y, tx: e.x, ty: e.y + dy, t: 0, dur: 0.5, h: 16, done: null };
+  floater("AAH!", e.x, e.y - 30, "#ffffff");
+}
+function updateMech(dt) {
+  const m = state.mech;
+  if (!m || dlg.open) return;
+  m.t += dt;
+  const done = () => { m.phase = "idle"; m.moving = false; const cb = m.cb; m.cb = null; if (cb) cb(); };
+  if (m.phase === "rise") {
+    m.stand = Math.min(1, m.stand + dt / 2.2);
+    fx.shake = Math.max(fx.shake, 0.15);
+    if (Math.random() < dt * 12) burst(1, m.x + (Math.random() - 0.5) * 40, m.y - 20 - Math.random() * 20, { angle: -Math.PI / 2, spread: 0.6, speed: [10, 25], life: [0.6, 1], size: [2, 3], colors: ["#e6eef2", "#c9d0d6"], fade: true });
+    if (m.stand >= 1) { fx.flash = 0.5; fx.flashRGB = "255,80,80"; fx.shake = 0.6; floater("MECH ONLINE", m.x, m.y - 72, "#ff9a9a"); done(); }
+  } else if (m.phase === "berserk") {
+    m.stompT -= dt; m.shoutT -= dt; m.laser = Math.max(0, m.laser - dt);
+    if (m.stompT <= 0) { m.stompT = 0.32; fx.shake = 0.35; m.side = !m.side; burst(6, m.x + (m.side ? -8 : 8), m.y, { speed: [15, 40], life: [0.3, 0.6], size: [1, 2], colors: ["#d3c5ab", "#ffffff"], fade: true }); }
+    if (m.shoutT <= 0) { m.shoutT = 0.9; floater(MECH_SHOUTS[Math.floor(Math.random() * MECH_SHOUTS.length)], m.x, m.y - 74, "#ffb3a8"); }
+    if (m.laser <= 0 && Math.random() < dt * 3) {
+      m.laser = 0.25; m.lx = m.x + (Math.random() - 0.5) * 90; m.ly = m.y + (Math.random() - 0.3) * 40;
+      burst(8, m.lx, m.ly, { speed: [20, 60], gravity: 80, life: [0.2, 0.5], size: [1, 2], colors: ["#ff3b3b", "#ffd25a", "#ffffff"] });
+    }
+    if (m.t > 2.8) done();
+  } else if (m.phase === "walk") {
+    m.moving = true;
+    m.x -= 44 * dt;
+    m.stompT -= dt;
+    if (m.stompT <= 0) { m.stompT = 0.4; fx.shake = Math.max(fx.shake, 0.25); burst(4, m.x, m.y, { speed: [10, 30], life: [0.3, 0.5], size: [1, 2], colors: ["#d3c5ab"], fade: true }); }
+    if (Math.random() < dt * 0.8) floater(MECH_SHOUTS[Math.floor(Math.random() * MECH_SHOUTS.length)], m.x, m.y - 74, "#ffb3a8");
+    state.mechHoles = state.mechHoles || new Set();
+    const smash = (col, label) => {
+      for (const rr of [5, 6]) state.mechHoles.add(col + "," + rr);
+      fx.shake = 0.8; fx.flash = 0.4; fx.flashRGB = "255,240,220";
+      burst(40, col * T + 8, 6 * T, { speed: [30, 110], gravity: 120, life: [0.5, 1.1], size: [2, 3], colors: ["#d8c39b", "#8a6a4a", "#4a3a46", "#e2cfa9"] });
+      floater(label, col * T + 8, 4 * T, "#ffffff");
+    };
+    if (!m.hit17 && m.x - 16 <= 18 * T) { m.hit17 = true; smash(17, "CRASH!"); }
+    if (!m.hit0 && m.x - 16 <= 1 * T) { m.hit0 = true; smash(0, "KA-BOOOM!"); }
+    for (const e of [player, ...npcs]) if (Math.abs(e.x - m.x) < 26 && Math.abs(e.y - m.y) < 20) flingAway(e, m);
+    if (m.x < -50) { m.phase = "gone"; done(); }
+  }
+  if (state.camOverride && m.stand > 0) { state.camOverride.x = Math.max(m.x, 6 * T); state.camOverride.y = m.y - 20; }
+}
+function drawMech() {
+  const m = state.mech;
+  if (!m) return;
+  const k = m.stand, lerp = (a, b) => a + (b - a) * k;
+  const x = Math.round(m.x), y = Math.round(m.y);
+  const step = m.moving ? Math.sin(m.t * 9) : m.phase === "berserk" ? (m.side ? 1 : -1) : 0;
+  const sw = m.phase === "berserk" ? Math.sin(m.t * 18) * 6 : step * 3;
+  const parts = [
+    [[20 * T + 3, 6 * T + 1, 10, 12], [x - 13, y - 16 - (step > 0 ? 3 : 0), 10, 16], "chair"],
+    [[21 * T + 3, 6 * T + 1, 10, 12], [x + 3, y - 16 - (step < 0 ? 3 : 0), 10, 16], "chair"],
+    [[19 * T + 3, 4 * T + 1, 10, 28], [x - 28, y - 44 + sw, 10, 24], "chair"],
+    [[22 * T + 3, 4 * T + 1, 10, 28], [x + 18, y - 44 - sw, 10, 24], "chair"],
+    [[20 * T, 4 * T + 2, 32, 26], [x - 16, y - 46, 32, 30], "table"],
+    [[20 * T + 3, 3 * T + 1, 26, 12], [x - 13, y - 60, 26, 13], "chair"],
+  ];
+  if (k > 0) F(x - 20, y - 2, 40, 4, `rgba(20,10,20,${0.3 * k})`);
+  for (const [a, b, kind] of parts) {
+    const rx = Math.round(lerp(a[0], b[0])), ry = Math.round(lerp(a[1], b[1])), rw = Math.round(lerp(a[2], b[2])), rh = Math.round(lerp(a[3], b[3]));
+    F(rx - 1, ry - 1, rw + 2, rh + 2, C.out);
+    if (kind === "table") {
+      F(rx, ry, rw, rh, "#a8703f"); F(rx, ry, rw, 1, "#c58a52"); F(rx, ry + rh - 4, rw, 4, "#7a4d2a");
+      F(rx + 3, ry + 5, rw - 6, 1, "rgba(0,0,0,.12)");
+    } else {
+      F(rx, ry, rw, rh, C.chair); F(rx, ry, rw, 1, "#5c7189"); F(rx, ry + Math.floor(rh * 0.6), rw, Math.ceil(rh * 0.4), C.chairBack);
+    }
+  }
+  if (k > 0.6) {
+    // glowing eyes on the head, a cockpit window in the chest with P. S. inside
+    const hx = Math.round(lerp(20 * T + 3, x - 13)), hy = Math.round(lerp(3 * T + 1, y - 60));
+    const glow = Math.floor(performance.now() / 120) % 2 ? "#ff3b3b" : "#ff7a7a";
+    F(hx + 5, hy + 5, 4, 2, glow); F(hx + 17, hy + 5, 4, 2, glow);
+    const cx = Math.round(lerp(20 * T, x - 16)) + 9, cy = Math.round(lerp(4 * T + 2, y - 46)) + 5;
+    const L = npcById("ps").look;
+    F(cx - 1, cy - 1, 16, 12, C.out); F(cx, cy, 14, 10, "#bfe8ff");
+    F(cx + 4, cy + 3, 6, 6, L.skin); F(cx + 4, cy + 2, 6, 2, L.hair); F(cx + 4, cy + 5, 6, 1, "#3a2a2a");
+    F(cx + 5, cy + 8, 4, 1, "#7a3a32"); F(cx + 1, cy + 1, 2, 1, "#ffffff");
+    if (m.laser > 0) { pline(hx + 7, hy + 6, Math.round(m.lx), Math.round(m.ly), "#ff3b3b"); pline(hx + 19, hy + 6, Math.round(m.lx) + 1, Math.round(m.ly), "#ff7a7a"); }
+  }
+}
+function endMech(exit) {
+  state.ended = true; keys.clear(); player.moving = false;
+  const titles = ["Meeting Adjourned (Violently)"];
+  if (state.golden) titles.push("Golden God of Productivity");
+  if (state.serverDead) titles.push("Destroyer of Production");
+  if (state.yogurtEaten) titles.push("Iron Stomach (Almost)");
+  if (cat.pets >= 5) titles.push("Cat Person");
+  showEnd("Secret ending", titles, [
+    ["Walls destroyed", 2],
+    ["Chairs turned into robot limbs", 8],
+    ["Tickets now marked Priority One", "All of them"],
+    ["Way home", exit === "hole" ? "Through the giant hole in the wall" : "The door, like a normal person"],
+    ["Team members met", `${metCount()}/${TOTAL}`],
+  ], "Start over");
+}
+
+/* ---------- M. R.'s secret lair ---------- */
+const SUIT_LOOK = { skin: "#f0c4a0", hair: "#2fb8c9", style: "helmet", beard: "none", shirt: "#2fb8c9", pants: "#1f6f7a", cape: true, capeCol: "#f2a04b", capeTrim: "#c9761f" };
+const SUIT_WHO = { name: "M. R.", role: "QA · Regression Armour Mk. II", look: SUIT_LOOK };
+function lairOffer(d) {
+  return [
+    { who: d, mood: "smirk", t: "Psst. Hey. New hire. Come here." },
+    { who: d, mood: "neutral", t: "Shhh... Can you keep a secret?", choices: [
+      { label: "Yes", fn: lairStart },
+      { label: "No", fn: () => openDialog([say(d, "Good answer. Nobody can. Forget I said anything.", "smirk")]) },
+    ] },
+  ];
+}
+function walkPlayerTo(c, r, done) {
+  const p = findPath(Math.floor(player.x / T), Math.floor((player.y - 2) / T), c, r);
+  if (!p) { [player.x, player.y] = tileFeet(c, r); if (done) done(); return; }
+  walkPlayer(p.map(([pc, pr]) => tileFeet(pc, pr)), done);
+}
+function lairStart() {
+  const MR = npcById("mr");
+  if (!MR || MR.gone) return;
+  state.lairScene = true; keys.clear(); player.moving = false;
+  const both = (a, b) => next => { let n = 0; const one = () => { if (++n === 2) next(); }; a(one); b(one); return "wait"; };
+  const mrTo = (c, r) => done => { MR.speed = 60; sendNpc(MR, c, r, () => { MR.speed = undefined; done(); }); };
+  const meTo = (c, r) => done => walkPlayerTo(c, r, done);
+  play([
+    [0.2, talk(MR, "Follow me. And act natural.", "smirk")],
+    [0.1, both(mrTo(28, 9), meTo(27, 10))],
+    [0.2, () => { MR.dir = "right"; player.dir = "right"; floater("*taps the wall three times*", MR.x, MR.y - 34, "#ffffff"); }],
+    [1.0, () => { floater("*click*", 29 * T + 8, 9 * T, "#ffd25a"); }],
+    [0.5, () => {
+      fx.shake = 1.2; state.lairOpen = true; state.lairLight = 0;
+      burst(24, 29 * T + 8, 9 * T + 8, { speed: [10, 40], life: [0.6, 1.2], size: [2, 3], colors: ["#857f8a", "#a9a3ae", "#d3c5ab"], fade: true });
+      state.camOverride = { x: 33 * T + 8, y: 8 * T };
+    }],
+    [1.0, () => { state.lairLightOn = true; floater("*lights flicker on*", 33 * T + 8, 6 * T, "#bfefff"); }],
+    [1.6, narrate("A section of the kitchen wall slides away. Behind it: a secret room full of blinking lights, humming screens... and a glowing glass pod.")],
+    [0.1, both(mrTo(31, 4), meTo(35, 7))],
+    [0.2, () => { MR.dir = "down"; player.dir = "left"; MR.ghostAll = true; }],
+    [0.3, talk(MR, "Behold. The Regression Armour, Mark II. Bug-proof. Coffee-powered. Fully regression-tested.", "happy")],
+    [0.2, talk(MR, "By day, I'm a QA engineer. By... also day, I'm a slightly more armoured QA engineer.", "smirk")],
+    [0.2, () => { MR.x = 31 * T + 8; MR.y = 4 * T - 2; MR.dir = "down"; floater("*steps into the pod*", MR.x, MR.y - 40, "#ffffff"); }],
+    [0.6, () => { floater("*CLANK*", MR.x - 6, MR.y - 40, "#ffffff"); burst(12, MR.x, MR.y - 12, { speed: [30, 70], gravity: 80, life: [0.2, 0.5], size: [1, 1], colors: ["#ffd25a", "#ffffff"] }); fx.shake = 0.2; }],
+    [0.5, () => { floater("*WHIRRR*", MR.x + 6, MR.y - 44, "#bfefff"); fx.flash = 0.25; fx.flashRGB = "140,230,255"; }],
+    [0.5, () => { floater("*BZZZT*", MR.x - 4, MR.y - 48, "#ffd25a"); burst(14, MR.x, MR.y - 16, { speed: [30, 80], gravity: 80, life: [0.2, 0.5], size: [1, 2], colors: ["#ffd25a", "#2fb8c9"] }); }],
+    [0.6, () => floater("Checklist loaded.", MR.x, MR.y - 44, "#5fd35f")],
+    [0.6, () => floater("Coffee levels: optimal.", MR.x, MR.y - 44, "#5fd35f")],
+    [0.6, () => {
+      state.suitTaken = true; MR.look = SUIT_LOOK;
+      fx.flash = 0.9; fx.flashRGB = "255,240,200"; fx.shake = 0.5;
+      [MR.x, MR.y] = tileFeet(31, 4); MR.hop = 0.45;
+      burst(40, MR.x, MR.y - 14, { speed: [30, 100], life: [0.5, 1.1], size: [1, 3], colors: ["#2fb8c9", "#f2a04b", "#ffffff"], fade: true });
+      floater("SUIT UP!", MR.x, MR.y - 40, "#ffd25a");
+    }],
+    [0.9, next => { openDialog([say(SUIT_WHO, "Somewhere out there, a bug is hiding in production. And I. Will. FIND IT.", "angry")], next); return "wait"; }],
+    [0.1, next => { MR.speed = 90; sendNpc(MR, 33, 10, () => { MR.speed = undefined; next(); }); return "wait"; }],
+    [0.1, next => { MR.air = { sx: MR.x, sy: MR.y, tx: 33 * T + 8, ty: 12 * T - 2, t: 0, dur: 0.4, h: 14, done: next }; return "wait"; }],
+    [0.1, () => { MR.dir = "down"; state.alarmT = 4; floater("WHOOOOOOSH!", MR.x, MR.y - 40, "#ffffff"); MR.sinkV = 1; }],
+    [1.0, () => { MR.gone = true; MR.sink = 0; MR.sinkV = 0; MR.ghostAll = false; }],
+    [0.6, narrate("M. R. is gone. Somewhere far below, a bug report is being filed with extreme prejudice.")],
+    [0.1, () => {
+      state.camOverride = null; state.lairScene = false; state.lairDone = true;
+      showHint("The secret room is open. Have a look around.");
+      later(25, () => {
+        if (state.vamp || state.dream || state.ninja) return;
+        MR.gone = false; MR.look = MR.def.look; MR.x = 33 * T + 8; MR.y = 12 * T - 2; MR.sink = 0;
+        MR.air = { sx: MR.x, sy: MR.y, tx: 33 * T + 8, ty: 11 * T - 2, t: 0, dur: 0.5, h: 22, done: () => {
+          floater("...False alarm. It was a caching issue.", MR.x, MR.y - 36, "#ffffff");
+          sendNpc(MR, MR.home[0], MR.home[1]);
+        } };
+      });
+    }],
+  ]);
+}
+Object.assign(INFO, {
+  U: ["M. R.'s suit pod. It hums quietly and smells faintly of fresh coffee and determination."],
+  W: ["A workbench covered in tiny screwdrivers, a soldering iron, and a mug that says WORKS ON MY MACHINE (crossed out)."],
+  I: ["A brass fire pole disappearing into total darkness. A sign says: QA PERSONNEL ONLY. You don't have clearance."],
+  Y: ["The big screen reads: BUGS DETECTED 4,812. BUGS FIXED 3. MORALE: HIGH."],
+  Q: ["The walls are lined with tiny blinking lights. One of them is just a sticker."],
+});
+function updateLair(dt) {
+  if (state.lairLightOn && state.lairLight < 1) state.lairLight = Math.min(1, state.lairLight + dt * 0.6);
+  if (state.alarmT > 0) state.alarmT -= dt;
+  for (const n of npcs) if (n.sinkV) n.sink = Math.min(34, (n.sink || 0) + dt * 40);
+}
+
+/* ---------- A. A. refactors the office ---------- */
+function refactorOffer(d) {
+  return [{ who: d, mood: "smirk", t: "So. How's your code looking? Any... rough edges?", choices: [
+    { label: "It works fine!", fn: refactorStart },
+    { label: "Still figuring it out.", fn: () => openDialog([say(d, "Good. Figuring it out is how it starts. Elegance comes later.", "happy")]) },
+  ] }];
+}
+function refactorStart() {
+  const AA = npcById("aa");
+  if (!AA || AA.gone) return;
+  state.refactorScene = true; state.refactored = true; keys.clear(); player.moving = false;
+  const others = npcs.filter(n => !n.gone && n !== AA && n !== SB);
+  const saved = new Map([...npcs].map(n => [n, { x: n.x, y: n.y, dir: n.dir }]));
+  state.rf = {};
+  const poofAt = (x, y) => burst(16, x, y - 10, { speed: [15, 40], life: [0.4, 0.9], size: [2, 3], colors: ["#d9c8ff", "#ffffff", "#b48ee0"], fade: true });
+  const hopTo = (c, r, label, effect) => next => {
+    const [tx, ty] = tileFeet(c, r);
+    AA.air = { sx: AA.x, sy: AA.y, tx, ty, t: 0, dur: 0.45, h: 20, done: () => {
+      floater(label, AA.x, AA.y - 36, "#d9c8ff"); poofAt(AA.x, AA.y); fx.shake = 0.25; effect(); next();
+    } };
+    return "wait";
+  };
+  play([
+    [0.2, () => { AA.hop = 0.45; AA.caught = 1.4; floater("*gasp*", AA.x, AA.y - 34, "#ffffff"); }],
+    [0.8, talk(AA, "It works... but is it ELEGANT?", "shock")],
+    [0.2, talk(AA, "Stand back. I'm going to refactor... EVERYTHING.", "angry")],
+    [0.3, hopTo(7, 6, "Extract method!", () => { state.rf.desks = true; for (const x of [3, 4, 11, 12]) for (const y of [4, 7, 10]) poofAt(x * T + 8, y * T + 12); })],
+    [0.6, hopTo(9, 3, "Move to a better module!", () => { state.rf.board = true; poofAt(9 * T + 8, 1 * T + 12); poofAt(12 * T + 8, 1 * T + 12); })],
+    [0.6, hopTo(7, 9, "Rename the theme!", () => { state.rf.theme = true; fx.flash = 0.3; fx.flashRGB = "217,200,255"; })],
+    [0.6, hopTo(9, 12, "Reorder the team!", () => {
+      const spots = others.map(n => [n.x, n.y]);
+      for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [spots[i], spots[j]] = [spots[j], spots[i]]; }
+      others.forEach((n, i) => { poofAt(n.x, n.y); [n.x, n.y] = spots[i]; poofAt(n.x, n.y); n.dir = "down"; });
+    })],
+    [0.6, hopTo(7, 15, "Delete unused code!", () => {
+      state.rf.noPlants = true;
+      for (let r = 0; r < MH; r++) for (let c = 0; c < MW; c++) if (at(c, r) === "p") poofAt(c * T + 8, r * T + 12);
+    })],
+    [0.5, () => { AA.dir = "down"; }],
+    [0.3, talk(AA, "Finally. Clean. Elegant. SOLID. Not a single code smell left.", "happy")],
+    [0.2, next => {
+      if (SB.gone) return next();
+      floater("...", SB.x, SB.y - 34, "#ffffff");
+      SB.speed = 70;
+      sendNpc(SB, 8, 12, () => { SB.speed = undefined; SB.dir = facingTo(SB, AA); next(); });
+      return "wait";
+    }],
+    [0.2, next => {
+      if (SB.gone) { openDialog([say(AA.def, "...Hm. Actually, the old version was fine. Reverting.", "neutral")], next); return "wait"; }
+      openDialog([
+        say(SB.def, "...Who moved my sprint board?", "angry"),
+        say(SB.def, "And why is the kitchen made of wood?", "angry"),
+        say(SB.def, "A. A. Put. It. Back.", "angry"),
+        say(AA.def, "...Reverting.", "neutral"),
+      ], next);
+      return "wait";
+    }],
+    [0.2, () => {
+      floater("git revert", AA.x, AA.y - 36, "#9fe0a8");
+      fx.flash = 0.6; fx.flashRGB = "255,255,255"; fx.shake = 0.3;
+      state.rf = null;
+      for (const [n, p] of saved) if (!n.gone && n !== SB && n !== AA) Object.assign(n, p);
+      AA.dir = "down";
+    }],
+    [0.6, narrate("Everything snaps back into place. Nobody speaks of this again.")],
+    [0.1, () => { state.refactorScene = false; SB.path = null; SB.forced = false; }],
+  ]);
+}
+
+/* ---------- Sitting at a colleague's desk (devs only) ---------- */
+const DESK_OWNERS = { "3,5": "ea", "3,8": "jg", "3,11": "sk", "2,8": "jjo", "11,5": "ir", "11,8": "pw", "11,11": "aw" };
+const npcById = id => npcs.find(n => n.def.id === id);
+// run a list of [delay, step] pairs; a step that returns "wait" calls next() itself (after a dialogue or a walk)
+function play(steps, i = 0) {
+  if (i >= steps.length) return;
+  const [d, fn] = steps[i];
+  after(d, () => { if (fn(() => play(steps, i + 1)) !== "wait") play(steps, i + 1); });
+}
+const talk = (o, text, mood) => next => { openDialog([say(o.def, text, mood)], next); return "wait"; };
+const narrate = text => next => { openDialog([{ t: text }], next); return "wait"; };
+const walkOwner = (o, c, r, speed) => next => { o.speed = speed; sendNpc(o, c, r, () => { o.speed = undefined; o.dir = facingTo(o, player); next(); }); return "wait"; };
+const pop = (o, text, color) => () => floater(text, o.x, o.y - 34, color || "#ffffff");
+function endScene(c, r, owner) {
+  player.borrowSeat = false; player.lift = 0; player.carrier = null;
+  if (c !== undefined) { [player.x, player.y] = tileFeet(c, r); player.dir = "down"; }
+  state.deskScene = false; state.deskOwner = null;
+  if (owner) { owner.path = null; owner.forced = false; owner.wait = 2; if (!state.met.includes(owner.def.id)) { state.met.push(owner.def.id); updateHud(); } }
+  state.deskHops = (state.deskHops || 0) + 1;
+}
+function deskHop(c, r) {
+  const owner = npcById(DESK_OWNERS[c + "," + r]);
+  if (!state.introDone || state.vamp || state.dream || state.ninja || whip.phase || state.standup || player.seated) return openDialog([{ t: INFO.c[0] }]);
+  if (!owner || owner.gone) return openDialog([{ t: `${owner ? owner.def.name : "Someone"}'s chair. Its owner is... unavailable right now. It feels wrong to sit in it.` }]);
+  state.deskScene = true; state.deskOwner = owner; keys.clear();
+  player.borrowSeat = true; player.x = c * T + 8; player.y = r * T + 12; player.dir = "up"; player.moving = false;
+  owner.path = null; owner.target = null;
+  floater("*sits*", player.x, player.y - 30, "#ffffff");
+  const below = r + 1;
+  const scenes = {
+    ea: () => [
+      [0.9, () => { burst(18, player.x, tileFeet(c, below)[1] - 12, { speed: [10, 30], life: [0.5, 1], size: [2, 3], colors: ["#857f8a", "#6b6670"], fade: true }); [owner.x, owner.y] = tileFeet(c, below); owner.dir = "up"; }],
+      [0.6, talk(owner, "I've been standing right here. The whole time.", "neutral")],
+      [0.3, pop(owner, "...")], [0.9, pop(owner, ". . .")], [0.9, pop(owner, "*heavy breathing*", "#ffd0d0")],
+      [0.8, talk(owner, "That chair remembers my shape. We have a BOND.", "angry")],
+      [0.3, narrate("E. A. lifts the chair, with you still in it, high above his head.")],
+      [0.2, next => {
+        player.borrowSeat = false; player.lift = 10; player.carrier = owner;
+        floater("*HNNNGH*", owner.x, owner.y - 30, "#ffffff");
+        const yb = tileFeet(0, below)[1], y12 = tileFeet(0, 12)[1];
+        walkPlayer([[player.x, yb], [7 * T + 8, yb], [7 * T + 8, y12], [13 * T + 8, y12]], () => { player.lift = 0; player.carrier = null; fx.shake = 0.3; floater("*PLONK*", player.x, player.y - 30); next(); });
+        return "wait";
+      }],
+      [0.4, talk(owner, "There. YOUR desk. Have a lovely day.", "happy")],
+      [0.1, () => endScene(13, 12, owner)],
+    ],
+    jg: () => [
+      [0.6, () => { owner.hop = 0.45; owner.caught = 1.6; }],
+      [0.5, pop(owner, "MY CHAIR!!", "#ffb3a8")],
+      [0.3, walkOwner(owner, c, below, 120)],
+      [0, () => { fx.shake = 0.4; floater("*knee slide*", owner.x, owner.y - 28, "#ffffff"); burst(10, owner.x, owner.y, { speed: [15, 40], life: [0.3, 0.6], size: [1, 2], colors: ["#d3c5ab", "#ffffff"], fade: true }); }],
+      [0.5, talk(owner, "Get up. GET UP. That chair is calibrated to the exact curve of my spine!", "angry")],
+      [0.3, pop(owner, "*measures*")], [0.6, pop(owner, "*measures again*")], [0.6, pop(owner, "*gasps*", "#ffd66b")],
+      [0.6, talk(owner, "Two millimetres off. TWO. Recalibration will take four to six business days.", "angry")],
+      [0.2, narrate("J. G. gives the chair one mighty spin.")],
+      [0.1, next => {
+        let k = 0;
+        const dirs = ["left", "down", "right", "up"];
+        const spin = () => { player.dir = dirs[k % 4]; k++; if (k < 16) after(0.06, spin); else next(); };
+        floater("WHEEEEE!", player.x, player.y - 34, "#fff3b0"); spin(); return "wait";
+      }],
+      [0, next => { player.borrowSeat = false; const [tx, ty] = tileFeet(8, 16); jumpTo(tx, ty, () => { fx.shake = 0.5; burst(12, player.x, player.y, { speed: [15, 45], life: [0.3, 0.6], size: [1, 2], colors: ["#d3c5ab", "#ffffff"], fade: true }); next(); }, 1.2, 55); return "wait"; }],
+      [0.4, talk(owner, "...and STAY off.", "smirk")],
+      [0.1, () => endScene(undefined, undefined, owner)],
+    ],
+    sk: () => [
+      [0.8, walkOwner(owner, c, below, 30)],
+      [0.3, talk(owner, "Oh. You're in my seat.", "neutral")],
+      [0.3, narrate("S. K.'s left eye starts to twitch.")],
+      [0.3, talk(owner, "That desk is where I keep my FEELINGS!", "angry")],
+      [0.1, () => { owner.crying = 2.5; fx.shake = 0.4; floater("WAAAAAAH!", owner.x, owner.y - 36, "#9fd8ff"); }],
+      [2.6, narrate("A tidal wave of tears sweeps you, the chair and a confused stapler across the office.")],
+      [0.1, next => { player.borrowSeat = false; const [tx, ty] = tileFeet(8, 12); player.surf = true; jumpTo(tx, ty, () => { player.surf = false; next(); }, 1.0, 3); return "wait"; }],
+      [0.3, talk(owner, "...Anyway! Want a biscuit?", "happy")],
+      [0.1, () => endScene(undefined, undefined, owner)],
+    ],
+    ir: () => [
+      [0.5, pop(owner, "VRRRRRRM!", "#9fd8ff")],
+      [0.2, walkOwner(owner, c, below, 130)],
+      [0, () => { fx.shake = 0.5; burst(14, owner.x, owner.y - 12, { speed: [30, 70], gravity: 90, life: [0.3, 0.6], size: [1, 2], colors: ["#f2c46d", "#ffffff"] }); floater("*CRASH*", owner.x, owner.y - 30); }],
+      [0.5, talk(owner, "INTRUDER DETECTED. INITIATING DESK DEFENCE PROTOCOL.", "angry")],
+      [0.1, () => { owner.lasers = 1.8; floater("pew pew pew", owner.x, owner.y - 40, "#ff8080"); }],
+      [1.9, narrate("Somewhere at home, I. R. is pressing every single button on his keyboard at once.")],
+      [0.2, talk(owner, "Sorry. Wrong button. What I meant was: please don't sit there.", "smirk")],
+      [0.1, next => { player.borrowSeat = false; const [tx, ty] = tileFeet(7, below); jumpTo(tx, ty, next, 0.6, 8); return "wait"; }],
+      [0.1, () => endScene(undefined, undefined, owner)],
+    ],
+    pw: () => [
+      [0.6, walkOwner(owner, c, below, 60)],
+      [0.3, narrate("P. W.'s robot screen flickers. He's unmuting...")],
+      [0.4, () => {
+        fx.shake = 1.4; fx.flash = 0.4; fx.flashRGB = "255,255,255";
+        floater("HELLOOOOOOO?!", owner.x, owner.y - 46, "#fff3b0");
+        floater("IS SOMEONE AT MY DESK?!", owner.x, owner.y - 36, "#fff3b0");
+        for (let i = 0; i < 8; i++) burst(4, (2 + (i % 4)) * T + 8 + (i > 3 ? 8 * T : 0), (4 + 3 * (i % 3)) * T, { angle: -Math.PI / 2, spread: 2, speed: [30, 80], gravity: 80, life: [0.8, 1.4], size: [2, 3], colors: ["#ffffff", "#f7f3ea"] });
+        for (const n of npcs) if (!n.gone && n !== owner) n.hop = 0.45;
+      }],
+      [1.5, talk(owner, "Sorry! Sorry. My volume was on 400 percent. Anyway. That's my desk. MY DESK.", "angry")],
+      [0.2, next => { floater("*bonk*", player.x, player.y - 30); player.borrowSeat = false; const [tx, ty] = tileFeet(7, below); jumpTo(tx, ty, next, 0.7, 6); return "wait"; }],
+      [0.1, () => endScene(undefined, undefined, owner)],
+    ],
+    aw: () => {
+      const [ex, ey] = tileFeet(c, below), sx = owner.x, sy = owner.y;
+      const lagStep = k => () => { owner.x = sx + (ex - sx) * k; owner.y = sy + (ey - sy) * k; owner.dir = "up"; floater("*lag*", owner.x, owner.y - 40, "#cfd5dc"); };
+      return [
+        [0.7, lagStep(0.25)], [0.7, lagStep(0.5)], [0.9, lagStep(0.5)], [0.5, lagStep(1)],
+        [0.4, talk(owner, "Th-th-that's m-m-my d-d-d-", "neutral")],
+        [0.2, narrate("A. W.'s robot freezes mid-sentence. The screen says: Reconnecting... (1 of 437)")],
+        [0.2, pop(owner, "Reconnecting...", "#cfd5dc")], [1.2, pop(owner, "Reconnecting......", "#cfd5dc")],
+        [1.2, talk(owner, "-desk. That's my desk. Sorry, my router lives in the basement.", "smirk")],
+        [0.2, narrate("You get up out of pure sympathy.")],
+        [0.1, () => endScene(7, below, owner)],
+      ];
+    },
+    jjo: () => {
+      const steps = [];
+      const [ex, ey] = tileFeet(c, below), sx = owner.x, sy = owner.y;
+      const hops = 4;
+      for (let i = 1; i <= hops; i++) {
+        const label = i === 3 ? "PACKET LOSS!" : `PACKET ${i}/${hops}`;
+        steps.push([0.15, next => { floater(label, owner.x, owner.y - 36, i === 3 ? "#ffb3a8" : "#9fd8ff"); owner.air = { sx: owner.x, sy: owner.y, tx: sx + (ex - sx) * i / hops, ty: sy + (ey - sy) * i / hops, t: 0, dur: 0.4, h: 16, done: next }; return "wait"; }]);
+      }
+      return [
+        [0.6, pop(owner, "Routing...", "#9fd8ff")],
+        ...steps,
+        [0.2, () => { owner.dir = "up"; }],
+        [0.2, talk(owner, "Your request to sit at this desk returned: 403 FORBIDDEN.", "angry")],
+        [0.1, () => { owner.firewall = 2.2; fx.shake = 0.4; floater("FIREWALL ENABLED", owner.x, owner.y - 40, "#ffb36b"); }],
+        [2.3, () => floater("*singe*", player.x, player.y - 30, "#ffd0a0")],
+        [0.4, talk(owner, "Please submit a ticket. Expected response time: four to six sprints.", "smirk")],
+        [0.1, next => { player.borrowSeat = false; const [tx, ty] = tileFeet(7, below); jumpTo(tx, ty, next, 0.6, 10); return "wait"; }],
+        [0.1, () => endScene(undefined, undefined, owner)],
+      ];
+    },
+  };
+  play(scenes[owner.def.id]());
+}
+function updateDeskFx(dt) {
+  for (const n of npcs) {
+    if (n.crying > 0) {
+      n.crying -= dt;
+      burst(3, n.x + (Math.random() < 0.5 ? -3 : 3), n.y - 20, { angle: -Math.PI / 2, spread: 1.6, speed: [30, 70], gravity: 160, life: [0.5, 0.9], size: [1, 2], colors: ["#8fd6e8", "#5fb0d9", "#cfefff"] });
+    }
+    if (n.lasers > 0) {
+      n.lasers -= dt;
+      if (Math.random() < 0.6) burst(1, player.x + (Math.random() - 0.5) * 16, player.y - 6 - Math.random() * 18, { speed: [0, 1], life: [0.08, 0.15], size: [2, 2], colors: ["#ff3030"] });
+    }
+    if (n.firewall > 0) {
+      n.firewall -= dt;
+      for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2; burst(1, player.x + Math.cos(a) * 18, player.y - 4 + Math.sin(a) * 10, { angle: -Math.PI / 2, spread: 0.5, speed: [15, 35], life: [0.3, 0.6], size: [1, 2], colors: ["#ff8a3a", "#ffd25a", "#e9483a"], fade: true }); }
+    }
+  }
+  if (player.surf) burst(3, player.x, player.y, { speed: [10, 40], gravity: 60, life: [0.3, 0.6], size: [1, 2], colors: ["#8fd6e8", "#5fb0d9", "#ffffff"] });
+}
+
+/* ---------- The Middleware Ninja (secret ending) ---------- */
+const NINJA_LOOK = { skin: "#1a1a22", hair: "#1a1a22", style: "ninja", beard: "none", shirt: "#1a1a22", pants: "#1a1a22", sword: true, ninja: true };
+const JOJn = npcs.find(n => n.def.id === "jjo");
+const NINJA_WHO = { name: "J. O. J.", role: "Middleware Ninja", look: NINJA_LOOK };
+const shuriken = [];
+function ninjaStart() {
+  if (!state.introDone || state.vamp || state.dream || whip.phase || state.standup || JOJn.gone || state.ninja) return openDialog([{ t: "Behind the server rack there's a dusty sports bag. You decide to leave it alone." }]);
+  state.ninja = "alert"; keys.clear(); player.moving = false;
+  JOJn.path = null; JOJn.target = null;
+  JOJn.hop = 0.45; JOJn.caught = 1.6; JOJn.dir = facingTo(JOJn, player); fx.shake = 0.3;
+  after(0.9, () => openDialog([say(JOJn.def, "HEY! Don't touch my ninja stuff! I got it at the mall for a hefty sum of money!", "angry")], () => {
+    state.ninja = "chase"; JOJn.speed = 90;
+    sendNpc(JOJn, Math.floor(player.x / T), Math.floor((player.y - 2) / T));
+  }));
+}
+function ninjaHop(n, tx, ty, dur, h, done) { n.air = { sx: n.x, sy: n.y, tx, ty, t: 0, dur, h, done }; n.dir = ty < n.y ? "up" : tx < n.x ? "left" : "right"; }
+function updateNinja(n, dt) {
+  if (n.hop > 0) { n.hop = Math.max(0, n.hop - dt); n.lift = Math.sin((1 - n.hop / 0.45) * Math.PI) * 7; }
+  if (n.caught > 0) n.caught = Math.max(0, n.caught - dt);
+  if (n.air) {
+    const a = n.air; a.t += dt;
+    const k = Math.min(1, a.t / a.dur);
+    n.x = a.sx + (a.tx - a.sx) * k; n.y = a.sy + (a.ty - a.sy) * k; n.lift = Math.sin(k * Math.PI) * a.h; n.moving = false;
+    if (k >= 1) { n.air = null; n.lift = 0; if (a.done) a.done(); }
+    stepAnim(n, dt); return;
+  }
+  if (n.waitT > 0) { n.waitT -= dt; n.moving = false; stepAnim(n, dt); if (n.waitT <= 0 && n.after) { const f = n.after; n.after = null; f(); } return; }
+  switch (state.ninja) {
+    case "chase":
+      if (n.path) followPath(n, dt);
+      if (Math.hypot(n.x - player.x, n.y - player.y) < 20 || (!n.path && !player.jump)) {
+        n.path = null; n.dir = facingTo(n, player);
+        floater("*SHOVE*", player.x, player.y - 32, "#ffffff"); fx.shake = 0.35;
+        const [px, py] = tileFeet(5, 12);
+        jumpTo(px, py, null);
+        state.ninja = "toServer";
+        n.waitT = 0.4; n.after = () => sendNpc(n, 1, 13, () => {
+          n.hidden = true; state.ninja = "change"; n.waitT = 1.6;
+          burst(14, n.x, n.y - 10, { speed: [10, 30], life: [0.6, 1.1], size: [2, 3], colors: ["#857f8a", "#6b6670"], fade: true });
+          floater("*rustle rustle*", n.x + 10, n.y - 30, "#ffffff");
+          n.after = ninjaReveal;
+        });
+      }
+      return;
+    case "toServer":
+      if (n.path) followPath(n, dt); else { n.moving = false; stepAnim(n, dt); }
+      return;
+    case "slice": {
+      const prey = n.prey;
+      if (n.path) followPath(n, dt);
+      if (prey && Math.hypot(prey.x - n.x, prey.y - n.y) < 18) {
+        n.path = null; n.dir = facingTo(n, prey);
+        prey.gone = true; prey.body = true; prey.split = true; state.robotsSliced = (state.robotsSliced || 0) + 1;
+        floater("SHING!", n.x, n.y - 36, "#ffffff");
+        floater("CALL ENDED", prey.x, prey.y - 26, "#9fd8ff");
+        burst(16, prey.x, prey.y - 14, { speed: [30, 80], gravity: 90, life: [0.3, 0.7], size: [1, 2], colors: ["#ffffff", "#f2c46d", "#7fd1e8"] });
+        fx.flash = 0.35; fx.flashRGB = "255,255,255"; fx.shake = 0.3;
+        state.ninja = "pause"; n.waitT = 0.8; n.after = ninjaLeap;
+      } else if (!n.path) ninjaLeap();
+      return;
+    }
+    case "stars":
+      n.starT -= dt;
+      n.dir = facingTo(n, SB);
+      if (n.thrown < 3 && n.starT <= 0 && !SB.gone) {
+        n.thrown++; n.starT = 0.35;
+        shuriken.push({ x: n.x, y: n.y - 14, t: 0 });
+        floater("Hi-YAH!", n.x, n.y - 34, "#ffffff");
+      }
+      if ((SB.gone || (n.thrown >= 3 && !shuriken.length)) && !n.starsDone) {
+        n.starsDone = true; n.waitT = 0.9; n.after = ninjaEscape;
+      }
+      stepAnim(n, dt);
+      return;
+  }
+  n.moving = false; stepAnim(n, dt);
+}
+function ninjaReveal() {
+  JOJn.hidden = false; JOJn.look = NINJA_LOOK; JOJn.dir = "down";
+  [JOJn.x, JOJn.y] = tileFeet(3, 13);
+  burst(20, JOJn.x, JOJn.y - 12, { speed: [20, 50], life: [0.5, 1], size: [2, 3], colors: ["#857f8a", "#6b6670", "#ffffff"], fade: true });
+  JOJn.hop = 0.45; fx.shake = 0.3;
+  floater("HI-YAH!", JOJn.x, JOJn.y - 36, "#ffffff");
+  state.ninja = "pause";
+  after(0.7, () => openDialog([
+    say(NINJA_WHO, "The way of the middleware is silent... and very, very fast.", "angry"),
+    { t: "J. O. J. draws a sword. Where was he keeping that?" },
+  ], () => {
+    const robots = npcs.filter(o => !o.gone && o.look.robot);
+    if (!robots.length) return ninjaLeap();
+    robots.sort((a, b) => Math.hypot(a.x - JOJn.x, a.y - JOJn.y) - Math.hypot(b.x - JOJn.x, b.y - JOJn.y));
+    JOJn.prey = robots[0];
+    floater("*shing*", JOJn.x, JOJn.y - 34, "#c9d0d6");
+    state.ninja = "slice";
+    sendNpc(JOJn, Math.floor(JOJn.prey.x / T), Math.floor((JOJn.prey.y - 2) / T));
+  }));
+}
+function ninjaLeap() {
+  state.ninja = "leap"; JOJn.path = null;
+  // hop over the desks, about three tiles at a time, up to the top wall
+  const [tx, ty] = tileFeet(12, 2);
+  const steps = Math.max(1, Math.ceil(Math.hypot(tx - JOJn.x, ty - JOJn.y) / 40));
+  const sx = JOJn.x, sy = JOJn.y;
+  let i = 0;
+  const next = () => {
+    i++;
+    if (i > steps) { state.ninja = "stars"; JOJn.thrown = 0; JOJn.starT = 0.3; JOJn.starsDone = false; JOJn.air = null; return; }
+    floater(i % 2 ? "Hup!" : "Hah!", JOJn.x, JOJn.y - 34, "#ffffff");
+    ninjaHop(JOJn, sx + (tx - sx) * i / steps, sy + (ty - sy) * i / steps, 0.42, 18, next);
+  };
+  next();
+}
+function ninjaEscape() {
+  state.ninja = "escape";
+  JOJn.dir = "up";
+  ninjaHop(JOJn, 12 * T + 8, 1 * T + 12, 0.5, 12, () => {
+    JOJn.gone = true; JOJn.hidden = false;
+    state.ninjaWindow = true; state.ninja = "gone";
+    fx.shake = 0.6; fx.flash = 0.4; fx.flashRGB = "200,220,255";
+    burst(30, 12 * T + 8, 1 * T + 8, { speed: [30, 100], gravity: 120, life: [0.5, 1], size: [1, 2], colors: ["#cfe3ea", "#ffffff", "#8fbcd6"] });
+    floater("SAYONARA!", 12 * T + 8, 1 * T, "#ffffff");
+    after(1.2, () => openDialog([{ t: "Oooooooooookaaaayy. I guess it's time to leave work for the day." }], () => showHint("Leave the building through the door.")));
+  });
+}
+function updateShuriken(dt) {
+  for (let i = shuriken.length - 1; i >= 0; i--) {
+    const st = shuriken[i]; st.t += dt;
+    const tx = SB.x, ty = SB.y - 14, dx = tx - st.x, dy = ty - st.y, d = Math.hypot(dx, dy), sp = 170 * dt;
+    if (d <= sp || SB.gone) {
+      shuriken.splice(i, 1);
+      if (SB.gone) continue;
+      SB.hits = (SB.hits || 0) + 1;
+      burst(8, SB.x, SB.y - 16, { speed: [20, 50], life: [0.3, 0.6], size: [1, 1], colors: ["#ffffff", "#c9d0d6"] });
+      floater("OW!", SB.x, SB.y - 34, "#ffb3a8");
+      if (SB.hits >= 3) {
+        SB.gone = true; SB.body = true; fx.shake = 0.4;
+        floater("@_@", SB.x, SB.y - 24, "#fff3b0");
+        state.leadsDown = (state.leadsDown || 0) + 1;
+      }
+    } else { st.x += dx / d * sp; st.y += dy / d * sp; }
+  }
+}
+function drawShuriken() {
+  for (const st of shuriken) {
+    const x = Math.round(st.x), y = Math.round(st.y), r = Math.floor(st.t * 20) % 2;
+    F(x - 2, y - 2, 5, 5, "rgba(0,0,0,0)");
+    if (r) { F(x - 2, y, 5, 1, "#c9d0d6"); F(x, y - 2, 1, 5, "#c9d0d6"); }
+    else { F(x - 2, y - 2, 1, 1, "#c9d0d6"); F(x + 2, y - 2, 1, 1, "#c9d0d6"); F(x - 2, y + 2, 1, 1, "#c9d0d6"); F(x + 2, y + 2, 1, 1, "#c9d0d6"); F(x - 1, y - 1, 3, 3, "#9aa3ad"); }
+    F(x, y, 1, 1, "#2a1d24");
+  }
+}
+function endNinja() {
+  state.ended = true; keys.clear(); player.moving = false;
+  const titles = ["The Way of the Middleware"];
+  if (state.golden) titles.push("Golden God of Productivity");
+  if (state.serverDead) titles.push("Destroyer of Production");
+  if (state.yogurtEaten) titles.push("Iron Stomach (Almost)");
+  if (cat.pets >= 5) titles.push("Cat Person");
+  showEnd("Secret ending", titles, [
+    ["Robots sliced in half", state.robotsSliced || 0],
+    ["Ninja stars thrown", 3],
+    ["Team leads knocked out", state.leadsDown || 0],
+    ["Windows broken", 1],
+    ["Price of the ninja gear", "A hefty sum (from the mall)"],
+    ["Team members met", `${metCount()}/${TOTAL}`],
+  ], "Start over");
+}
+
+/* ---------- The thermostat ---------- */
+const HOT = ["Phew!", "*fans self*", "So hot...", "It's a sauna!", "*wipes forehead*"];
+const COLD = ["Brrr!", "*shivers*", "So cold...", "Achoo!", "*teeth chattering*"];
+const TEMP_LINES = {
+  hot: ["Is it just me, or is it really hot in here?", "I'm sweating onto my keyboard. That can't be good for it.", "Who turned the office into a sauna? We're not THAT Swedish."],
+  cold: ["I can see my breath. Indoors. In an office.", "My fingers are too cold to type. That's my excuse and I'm sticking to it.", "I put my scarf on. Then my second scarf."],
+  robotHot: "My robot is overheating. I'm at home, and somehow it's still too hot here too.",
+  robotCold: "The cold is draining my robot's battery. Please. I have a meeting in five minutes.",
+};
+function thermostat() {
+  if (!state.introDone || state.vamp || state.dream) return openDialog([{ t: "A thermostat. It says 21°C. It looks very tempting to touch." }]);
+  const choices = [];
+  if (state.temp !== 30) choices.push({ label: "Turn it up to 30°C", fn: () => setTemp(30) });
+  if (state.temp !== 14) choices.push({ label: "Turn it down to 14°C", fn: () => setTemp(14) });
+  if (state.temp !== 21) choices.push({ label: "Put it back to 21°C", fn: () => setTemp(21) });
+  choices.push({ label: "Leave it alone", fn: () => {} });
+  openDialog([{ t: `The office thermostat. It's set to ${state.temp}°C. A sticky note on it says: DO NOT TOUCH. — S. B.`, choices }]);
+}
+function setTemp(v) {
+  const was = state.temp;
+  state.temp = v; state.tempT = 0; state.sbOnWay = false;
+  if (v !== 21 && was === 21) state.thermoIncidents = (state.thermoIncidents || 0) + 1;
+  updateHud();
+  floater(v + "°C", 4 * T + 8, 1 * T + 2, v > 21 ? "#ffb3a8" : v < 21 ? "#b3e0ff" : "#ffffff");
+  if (v === 30) openDialog([{ t: "You crank it up to 30°C. Somewhere behind the walls, the radiators start clanking ominously." }]);
+  else if (v === 14) openDialog([{ t: "You turn it down to 14°C. A cold draught creeps across the floor. The windows start to frost over." }]);
+  else openDialog([{ t: "You put it back to 21°C. Nobody will ever know." }]);
+}
+function updateThermostat(dt) {
+  if (state.temp === 21 || state.dream || state.vamp) return;
+  const hot = state.temp > 21;
+  // sweat drops or breath clouds, and the odd complaint
+  for (const e of [player, ...npcs]) {
+    if (e.gone || e.look.robot) continue;
+    if (Math.random() < dt * 0.9) {
+      if (hot) burst(1, e.x + (Math.random() < 0.5 ? -5 : 5), e.y - 20, { speed: [2, 6], gravity: 60, life: [0.5, 0.8], size: [1, 1], colors: ["#8fd6e8", "#cfefff"] });
+      else burst(1, e.x + (e.dir === "left" ? -6 : e.dir === "right" ? 6 : 0), e.y - 17, { angle: -Math.PI / 2, spread: 0.6, speed: [4, 9], life: [0.7, 1.1], size: [2, 2], colors: ["rgba(255,255,255,.75)"], fade: true });
+    }
+    if (e !== player && Math.random() < dt * 0.06) { const pool = hot ? HOT : COLD; floater(pool[Math.floor(Math.random() * pool.length)], e.x, e.y - 32, hot ? "#ffd0a0" : "#cfe8ff"); }
+  }
+  if (dlg.open || fade.on) return;
+  state.tempT += dt;
+  // after a while S. B. notices, shouts, and marches over to fix it
+  if (state.tempT > 14 && !state.sbOnWay && !SB.gone && !whip.phase && !state.standup && !SB.path) {
+    state.sbOnWay = true;
+    SB.shout = 2; fx.shake = 0.4;
+    floater("OI!!", SB.x, SB.y - 40, "#ffb3a8");
+    openDialog([say({ ...BYID.sb, role: "Shouting from across the office" }, hot ? "WHO TOUCHED THE THERMOSTAT?! It's like a sauna in here!" : "WHO TOUCHED THE THERMOSTAT?! I can see my BREATH!", "angry")], () => {
+      sendNpc(SB, 4, 2, () => {
+        SB.dir = "up";
+        state.temp = 21; state.sbOnWay = false; updateHud();
+        floater("Twenty-one. ALWAYS twenty-one.", SB.x, SB.y - 36, "#ffffff");
+      });
+    });
+  }
+}
+function drawScarf(e) {
+  const x = Math.round(e.x), y = Math.round(e.y), side = e.dir === "left" || e.dir === "right";
+  const red = "#d6453a", hi = "#e9788a";
+  if (side) { F(x - 4, y - 15, 8, 2, red); F(x - 4, y - 15, 8, 1, hi); F(e.dir === "left" ? x + 3 : x - 5, y - 13, 2, 4, red); }
+  else { F(x - 5, y - 15, 10, 2, red); F(x - 5, y - 15, 10, 1, hi); if (e.dir === "down") F(x + 2, y - 13, 2, 4, red); }
+}
+
+/* ---------- The zombie film dream ---------- */
+const zombieCache = new Map();
+function zombify(look) {
+  if (!look || look.cat) return look;
+  let z = zombieCache.get(look);
+  if (!z) {
+    z = { ...look, skin: mixHex(look.skin, "#8fbf6a", 0.65), shirt: shade(look.shirt, 0.62), pants: shade(look.pants || "#3b4a6b", 0.7),
+      eyes: "#d6453a", zombie: true, glasses: look.glasses };
+    zombieCache.set(look, z);
+  }
+  return z;
+}
+const MOANS = ["Braaaains...", "Coffeeeee...", "Stand-uuuup...", "Merge requeeeests...", "Jiiiraaaa...", "Deploooy..."];
+const SOFA_SEAT = [25 * T + 8, 18 * T - 4];
+function tvLook() {
+  if (state.dream) return openDialog([{ t: "The TV shows nothing but static. Somewhere behind you, something is shuffling." }]);
+  openDialog([{ t: "The TV by the sofa is playing a zombie film: NIGHT OF THE LIVING DEVS. Somebody left it on with the sound off." }]);
+}
+function sofaChoice() {
+  if (!state.introDone || state.vamp || whip.phase || player.seated || state.standup || state.dream) return openDialog([{ t: INFO.o[0] }]);
+  openDialog([{ t: "A worn sofa, right in front of the TV. NIGHT OF THE LIVING DEVS is just getting to the good part.", choices: [
+    { label: "Sit down and watch the film", fn: watchFilm },
+    { label: "Not now", fn: () => {} },
+  ] }]);
+}
+function watchFilm() {
+  player.onSofa = true; player.x = SOFA_SEAT[0]; player.y = SOFA_SEAT[1]; player.dir = "down"; player.moving = false;
+  keys.clear();
+  floater("*munch*", player.x, player.y - 30, "#ffffff");
+  after(1.4, () => floater("z", player.x + 4, player.y - 28, "#dfe7f2"));
+  after(2.2, () => floater("z", player.x + 6, player.y - 32, "#dfe7f2"));
+  after(3.0, () => fadeThrough("Zzz...", "You drift off in front of the film...", startDream, () => openDialog([
+    { t: "You wake up on the sofa. The film is over. The lights are flickering." },
+    { t: "Everyone is... shuffling. And moaning. And very, very green." },
+  ], () => {
+    player.onSofa = false;
+    [player.x, player.y] = tileFeet(26, 16); player.dir = "down";
+    state.dreamT = 0;
+    showHint("Your colleagues have turned into zombies! Don't let them catch you.");
+  }), true));
+}
+function startDream() {
+  state.dream = true; state.dreamT = 0; state.waking = false;
+  for (const n of npcs) { if (n.gone) continue; n.path = null; n.target = null; n.forced = false; n.zTimer = Math.random(); n.speed = 13 + Math.random() * 6; }
+}
+function updateDream(dt) {
+  if (!state.dream || state.waking || dlg.open || fade.on || player.onSofa) return;
+  state.dreamT += dt;
+  for (const n of npcs) {
+    if (n.gone) continue;
+    if (Math.hypot(n.x - player.x, n.y - player.y) < 13) { wakeUp(true); return; }
+  }
+  if (state.dreamT > 45) wakeUp(false);
+}
+function updateZombie(n, dt) {
+  if (state.waking || dlg.open || fade.on || player.onSofa) { n.moving = false; stepAnim(n, dt); return; }
+  if (Math.random() < dt * 0.12) floater(MOANS[Math.floor(Math.random() * MOANS.length)], n.x, n.y - 32, "#b9e0a0");
+  n.zTimer -= dt;
+  if (n.zTimer <= 0) {
+    n.zTimer = 1.4;
+    sendNpc(n, Math.floor(player.x / T), Math.floor((player.y - 2) / T));
+  }
+  if (n.path) followPath(n, dt); else { n.moving = false; stepAnim(n, dt); }
+}
+function wakeUp(caught) {
+  state.waking = true;
+  if (caught) { fx.shake = 0.6; floater("BRAAAINS!", player.x, player.y - 34, "#b9e0a0"); }
+  after(caught ? 0.6 : 0.2, () => fadeThrough(caught ? "AAAH!" : "Zzz...", caught ? "Teeth. So many teeth." : "The film is ending...", () => {
+    state.dream = false; state.waking = false;
+    for (const n of npcs) {
+      if (n.gone) continue;
+      const [x, y] = tileFeet(n.home[0], n.home[1]);
+      Object.assign(n, { x, y, dir: "down", path: null, target: null, forced: false, speed: n === SD && state.vamp ? n.speed : undefined, moving: false });
+    }
+    player.onSofa = true; player.x = SOFA_SEAT[0]; player.y = SOFA_SEAT[1]; player.dir = "down";
+    state.creditsT = 20;
+  }, () => {
+    const lines = [
+      { t: caught ? "You wake up on the sofa with a jolt, heart pounding." : "You wake up on the sofa with a jolt." },
+      { t: "The TV is rolling the end credits. You must have fallen asleep watching the film." },
+    ];
+    if (!SB.gone) lines.push(say({ ...BYID.sb, role: "Shouting from across the office" }, "Nap time is over! Back to work!", "smirk"));
+    else lines.push({ t: "Right. Back to work." });
+    openDialog(lines, () => { player.onSofa = false; [player.x, player.y] = tileFeet(26, 16); player.dir = "down"; state.dreamsHad = (state.dreamsHad || 0) + 1; });
+  }, true));
 }
 
 /* ---------- Children of the Night (secret ending) ---------- */
@@ -2370,6 +3741,7 @@ function catRest() {
   else { cat.state = "sit"; cat.timer = 2 + Math.random() * 4; cat.dir = ["down", "left", "right"][Math.floor(Math.random() * 3)]; }
 }
 function updateCat(dt) {
+  if (state.bh || state.void) return;
   if (dlg.open && talkingTo === cat) { cat.moving = false; stepAnim(cat, dt); return; }
   if (cat.state === "walk" && cat.path) {
     const [tx, ty] = cat.path[0];
@@ -2479,16 +3851,18 @@ const OUTSIDER_LOOKS = [
   { skin: "#eebf98", hair: "#7d7468", style: "bald", beard: "full", shirt: "#8a8f99" },
   { skin: "#f0c09a", hair: "#5a3a26", style: "short", beard: "stache", shirt: "#b0864a" },
 ];
+const OUTSIDER_X = [36, 72, 200, 270, 340, 410];
 const outsiders = OUTSIDER_LOOKS.map((look, i) => ({
-  look, x: 30 + i * 70, y: (MH - 2 - (i % 2)) * T + T - 3, vx: (i % 2 ? -1 : 1) * (18 + (i * 7) % 16),
+  look, x: OUTSIDER_X[i], zone: OUTSIDER_X[i] < 7 * 16 ? [22, 6 * 16 - 8] : [11 * 16 + 8, 30 * 16 - 22], y: (MH - 2 - (i % 2)) * T + T - 3, vx: (i % 2 ? -1 : 1) * (18 + (i * 7) % 16),
   dir: i % 2 ? "left" : "right", step: 0, stepT: 0, moving: true, pause: 0,
 }));
 function updateOutsiders(dt) {
+  if (state.bh || state.void) return;
   for (const o of outsiders) {
     if (o.pause > 0) { o.pause -= dt; o.moving = false; if (o.pause <= 0) o.dir = o.vx < 0 ? "left" : "right"; stepAnim(o, dt); continue; }
     o.moving = true;
     o.x += o.vx * dt;
-    if (o.x < 22 || o.x > MW * T - 22) { o.vx = -o.vx; o.x = Math.max(22, Math.min(MW * T - 22, o.x)); }
+    if (o.x < o.zone[0] || o.x > o.zone[1]) { o.vx = -o.vx; o.x = Math.max(o.zone[0], Math.min(o.zone[1], o.x)); }
     o.dir = o.vx < 0 ? "left" : "right";
     if (Math.random() < dt * 0.12) { o.pause = 1 + Math.random() * 2.5; o.dir = "up"; }
     stepAnim(o, dt);
@@ -2643,7 +4017,7 @@ function followPath(n, dt) {
     let nx = n.x, ny = n.y;
     if (Math.abs(dx) >= 1) { nx += Math.sign(dx) * Math.min(sp, Math.abs(dx)); n.dir = dx < 0 ? "left" : "right"; }
     else { ny += Math.sign(dy) * Math.min(sp, Math.abs(dy)); n.dir = dy < 0 ? "up" : "down"; }
-    if (blockedAt(nx, ny, n, true)) {
+    if (n.ghostAll ? solidAt(nx, ny) : blockedAt(nx, ny, n, true)) {
       n.moving = false; n.stuck += dt;
       if (n.stuck > 2.5) { const last = n.path[n.path.length - 1]; n.x = last[0]; n.y = last[1]; n.path = [last]; n.stuck = 0; }
     } else { n.x = nx; n.y = ny; n.moving = true; n.stuck = 0; }
@@ -2710,6 +4084,19 @@ function interact() {
   if (dlg.open) { advance(); return; }
   if (cut.phase !== "done" || busy()) return;
   if (player.seated) { tryStand(); return; }
+  if (state.void) {
+    if (state.portal && state.portal.reset) return openDialog([{ t: "The portal hums. All you have to do is walk into it." }]);
+    if (state.lion && Math.hypot(state.lion.x - player.x, state.lion.y - player.y) < 44) { state.lion.sit = true; state.lion.moving = false; state.lion.dir = "down"; return lionTalk(); }
+    return openDialog([{ t: state.lion ? "There's nothing here except a lion, padding towards you through the white." : "There's nothing here. Nothing at all." }]);
+  }
+  if (state.dream) {
+    const [ddx, ddy] = DIRV[player.dir];
+    const zx = player.x + ddx * 12, zy = player.y - 3 + ddy * 12;
+    const z = npcs.find(n => !n.gone && Math.hypot(zx - n.x, zy - (n.y - 3)) < 14);
+    if (z) return openDialog([say({ ...z.def, look: zombify(z.def.look) }, MOANS[Math.floor(Math.random() * MOANS.length)], "angry")]);
+    if (at(Math.floor(zx / T), Math.floor(zy / T)) === "V") return tvLook();
+    return openDialog([{ t: "You can't focus on that right now. There are zombies everywhere." }]);
+  }
   const [dx, dy] = DIRV[player.dir];
   const fx = player.x + dx * 12, fy = player.y - 3 + dy * 12;
   if (Math.hypot(fx - cat.x, fy - (cat.y - 4)) < 11) return petCat();
@@ -2740,6 +4127,7 @@ function interact() {
   }
   const ch = at(Math.floor(fx / T), Math.floor(fy / T));
   if (ch !== "s") state.serverPokes = 0;
+  if (ch === "s" && player.dir === "down" && Math.floor((player.y - 2) / T) === 13) { state.serverPokes = 0; return ninjaStart(); }
   if (ch === "s") {
     if (state.serverDead) return openDialog([{ t: "What's left of the server rack. It smells like burnt toast and regret." }]);
     state.serverPokes++;
@@ -2759,11 +4147,17 @@ function interact() {
   if (ch === "k" && !state.retro && !state.oldCoffeeFound && Math.floor(fx / T) === 25) return findOldCoffee();
   if (ch === "m") return brewCoffee();
   if (ch === "R") return lookInMirror();
+  if (ch === "V") return tvLook();
+  if (ch === "H") return thermostat();
+  if (ch === "o") return sofaChoice();
   if (ch === "b") return sprintBoard();
   if (ch === "G") return glassTalk();
   if (ch === "T" && !state.masked) return pickUpMask();
   const tc = Math.floor(fx / T), tr = Math.floor(fy / T);
+  if (tc === HOLE[0] && tr === HOLE[1] && !state.bhUsed) { state.serverPokes = 0; return dotOffer(); }
   if (ch === "n" || (ch === "c" && tc === 13 && tr === 11)) { state.serverPokes = 0; return sit(); }
+  if (ch === "c" && tc >= 19 && tc <= 22 && tr >= 3 && tr <= 6) { state.serverPokes = 0; return mechOffer(); }
+  if (ch === "c" && DESK_OWNERS[tc + "," + tr]) { state.serverPokes = 0; return deskHop(tc, tr); }
   const pool = INFO[ch];
   if (pool) openDialog([{ t: pool[Math.floor(Math.random() * pool.length)] }]);
 }
@@ -2799,6 +4193,9 @@ function updateHud() {
   hFocus.style.width = state.focus + "%";
   hFocus.style.background = state.golden ? "linear-gradient(90deg,#f2c94c,#fff3b0,#f2c94c)" : state.focus < 25 ? "#d9634f" : state.focus < 50 ? "#e2b33f" : "";
   hCoffee.textContent = state.coffees;
+  const ht = document.getElementById("hTemp");
+  ht.textContent = state.temp + "°C";
+  ht.style.color = state.temp > 21 ? "#c0443b" : state.temp < 21 ? "#2f6fb0" : "";
   hMet.textContent = `${metCount()}/${TOTAL}`;
   hMet.classList.toggle("done", metCount() >= TOTAL);
 }
@@ -2811,13 +4208,13 @@ function updateTime(dt) {
     state.minutes += 10;
     if (!state.golden) state.focus = Math.max(0, state.focus - 1.5);
     updateHud();
-    if (state.minutes >= 17 * 60 && !state.fiveDone) { state.tickAcc = 0; fiveOClock(); break; }
+    if (state.minutes >= 17 * 60 && !state.fiveDone && !state.dream && !state.ninja && !state.bh && !state.void) { state.tickAcc = 0; fiveOClock(); break; }
   }
 }
 
 /* ---------- Render ---------- */
 function render(time) {
-  const vw = cv.width, vh = cv.height, WW = MW * T, WH = MH * T;
+  const vw = cv.width, vh = cv.height, WW = (state.lairOpen ? MW : OFFICE_W) * T, WH = MH * T;
   const zoom = 1;
   const ww = vw / zoom, wh = vh / zoom;
   let camX = camFX - ww / 2, camY = camFY - 10 - wh / 2;
@@ -2830,6 +4227,7 @@ function render(time) {
 
   g.setTransform(1, 0, 0, 1, 0, 0);
   F(0, 0, vw, vh, C.void);
+  if (state.bh) for (let i = 0; i < 60; i++) { const h = hash(i, 7); if ((h >>> 3) % 5) F(h % vw, (h >>> 9) % vh, 1, 1, "rgba(255,255,255,.7)"); }
   const world = () => g.setTransform(zoom, 0, 0, zoom, -camX * zoom, -camY * zoom);
   world();
 
@@ -2838,43 +4236,73 @@ function render(time) {
 
   const list = [];
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-    const ch = at(c, r), px = c * T, py = r * T;
-    if (isWall(ch)) drawWall(c, r, px, py, ch);
+    if (c >= OFFICE_W && !state.lairOpen) continue;
+    if (state.void || (state.eaten && state.eaten.has(c + "," + r))) continue;
+    const [sc, sr] = rfSrc(c, r), ch = at(sc, sr), px = c * T, py = r * T;
+    if (isWall(ch)) drawWall(sc, sr, px, py, ch);
     else {
       drawFloor(c, r, px, py, ch);
+      if (c === HOLE[0] && r === HOLE[1] && !state.bhUsed) {
+        F(px + 6, py + 6, 4, 4, "#0b0a14"); F(px + 7, py + 5, 2, 1, "#0b0a14"); F(px + 7, py + 10, 2, 1, "#0b0a14"); F(px + 5, py + 7, 1, 2, "#0b0a14"); F(px + 10, py + 7, 1, 2, "#0b0a14");
+        if (Math.floor(time * 2) % 4 === 0) F(px + 7, py + 7, 1, 1, "#7b4fd1");
+      }
       if (state.retro && state.floppy === "floor" && c === FLOPPY_TILE[0] && r === FLOPPY_TILE[1]) {
         F(px + 4, py + 6, 8, 8, C.out); F(px + 5, py + 7, 6, 6, "#2f5fbf");
         F(px + 6, py + 7, 4, 2, "#c9d0d6"); F(px + 6, py + 10, 4, 3, "#f7f3ea");
         if (Math.floor(time * 3) % 3 === 0) F(px + 12, py + 4, 1, 1, "#ffffff");
       }
-      if (OBJ.includes(ch)) {
+      if (OBJ.includes(ch) && !(ch === "p" && state.rf && state.rf.noPlants)) {
         if (ch === "s") {
           if (at(c - 1, r) !== "s" && at(c, r - 1) !== "s") list.push({ k: (r + 2) * T, f: () => drawObject(ch, c, r, px, py, time) });
-        } else list.push({ k: (r + 1) * T - (ch === "c" ? 2 : 0), f: () => drawObject(ch, c, r, px, py, time) });
+        } else list.push({ k: (r + 1) * T - (ch === "c" ? 2 : 0), f: () => drawObject(ch, sc, sr, px, py, time) });
       }
     }
   }
   for (const d of decals) drawPuddle(d);
-  list.push({ k: cat.y, f: drawCat });
-  for (const o of outsiders) list.push({ k: o.y, f: () => drawPerson(o) });
-  for (const n of npcs) if (n.gone && n.body) list.push({ k: n.y - 12, f: () => drawBody(n) });
-  for (const e of chars) if (!e.gone) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.y, f: () => {
+  if (!cat.voided) list.push({ k: cat.y, f: drawCat });
+  for (const o of outsiders) if (!o.voided) list.push({ k: o.y, f: () => drawPerson(o) });
+  if (state.portal) list.push({ k: state.portal.y - 1, f: drawPortal });
+  if (state.lion) list.push({ k: state.lion.y, f: drawLion });
+  for (const n of npcs) if (n.gone && n.body && !n.voided) list.push({ k: n.y - 12, f: () => drawBody(n) });
+  for (const n of npcs) if (n.lie) list.push({ k: 1e6, f: () => drawBody(n, true) });
+  if (state.mech) list.push({ k: state.mech.y, f: drawMech });
+  for (const e of chars) if (!e.gone && !e.hidden) list.push({ k: e === player && (player.onTable || player.jump) ? 1e6 : e.air ? 1e6 : e === player && player.onSofa ? 17 * T + 10 : e.y, f: () => {
     const lift = Math.round(e.lift || 0);
     if (lift) { F(Math.round(e.x) - 5, Math.round(e.y) - 1, 10, 2, "rgba(20,10,20,.25)"); e.y -= lift; }
+    const sink = Math.round(e.sink || 0);
+    if (sink) { g.save(); g.beginPath(); g.rect(Math.round(e.x) - 24, Math.round(e.y) - 80, 48, 80); g.clip(); e.y += sink; }
     if (e === player && (state.golden || (fx.ascend > 1.1 && Math.floor(time * 14) % 2 === 0))) drawAura(e, time, fx.ascend > 0 ? 1.4 : 1);
-    if (e === player && player.hurt > 0) {
+    if (state.temp < 21 && e !== player && !state.dream && Math.random() < 0.25) {
+      const x0 = e.x; e.x += Math.random() < 0.5 ? -1 : 1; drawPerson(e); if (!e.look.robot) drawScarf(e); e.x = x0;
+    } else if (e === player && player.hold) {
+      const ox = Math.sign(HOLE_X - e.x) * (1 + Math.floor(Math.random() * 3)), x0 = e.x;
+      e.x += ox; drawPerson(e); e.x = x0;
+      if (Math.random() < 0.3) burst(1, e.x, e.y - 12 + Math.random() * 10, { angle: Math.atan2(HOLE_Y - e.y, HOLE_X - e.x), spread: 0.2, speed: [40, 70], life: [0.2, 0.4], size: [1, 1], colors: ["#ffffff"], fade: true });
+    } else if (e === player && player.hurt > 0) {
       const ox = Math.random() < 0.5 ? -1 : 1, x0 = e.x;
       e.x += ox; drawPerson(e); e.x = x0;
-    } else drawPerson(e);
+    } else { drawPerson(e); if (state.temp < 21 && !e.look.robot && !state.dream) drawScarf(e); }
+    if (sink) { e.y -= sink; g.restore(); }
     if (lift) e.y += lift;
   } });
   list.sort((a, b) => a.k - b.k);
   for (const it of list) it.f();
+  if (state.bh) {
+    const r = Math.round(state.bh.r), t = time;
+    disc(HOLE_X, HOLE_Y, r + 6, "rgba(123,79,209,.25)");
+    disc(HOLE_X, HOLE_Y, r + 3, "rgba(226,64,143,.35)");
+    for (let i = 0; i < 10; i++) { const a = t * 4 + i * 0.63, d = r + 2 + (i % 3); F(Math.round(HOLE_X + Math.cos(a) * d), Math.round(HOLE_Y + Math.sin(a) * d * 0.8), 2, 1, i % 2 ? "#ffffff" : "#b48ee0"); }
+    disc(HOLE_X, HOLE_Y, r, "#000000");
+  }
   drawParticles();
+  drawShuriken();
+  if (state.lairOpen && state.lairLight < 1) { F(OFFICE_W * T, 0, 8 * T, 14 * T, `rgba(5,8,14,${0.85 * (1 - state.lairLight)})`); }
+  if (state.alarmT > 0 && Math.floor(performance.now() / 200) % 2) F(OFFICE_W * T, 0, 8 * T, 14 * T, "rgba(255,40,40,.12)");
   if (SB.crack > 0) drawWhip();
   drawFloaters();
   if (SB.shout > 0) drawNotice(SB.x, SB.y - 30, 2 - SB.shout);
   for (const n of npcs) {
+    if (n.hidden || n.voided) continue;
     if (onPhone(n)) drawPhoneInHands(n);
     if (n.caught > 0) drawNotice(n.x, n.y - 30 - (n.lift || 0), 1.6 - n.caught);
   }
@@ -2886,7 +4314,7 @@ function render(time) {
   if (fx.flash > 0) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(${fx.flashRGB},${fx.flash})`; g.fillRect(0, 0, vw, vh); world(); }
   if (intro.on && intro.frozen) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(${intro.tint},.28)`; g.fillRect(0, 0, vw, vh); world(); }
   for (const n of npcs) {
-    if (dlg.open || cut.phase !== "done" || state.vamp) break;
+    if (dlg.open || cut.phase !== "done" || state.vamp || state.bh || state.void) break;
     const top = n.y - (n.look.robot ? 39 : 30);
     if (n === near) drawBubble(n.x, top);
     else if (!state.met.includes(n.def.id)) drawExclaim(n.x, top);
@@ -3246,6 +4674,16 @@ function loop(t) {
   updateOutsiders(dt);
   updateCat(dt);
   updateFade(dt);
+  updateDream(dt);
+  updateThermostat(dt);
+  updateShuriken(dt);
+  updateDeskFx(dt);
+  updateLair(dt);
+  updateMech(dt);
+  updateBlackHole(dt);
+  updateLion(dt);
+  updatePortal(dt);
+  if (state.creditsT > 0) state.creditsT -= dt;
   if (state.retro && state.floppy === "floor" && !dlg.open && !busy()
       && Math.floor(player.x / T) === FLOPPY_TILE[0] && Math.floor((player.y - 2) / T) === FLOPPY_TILE[1]) pickUpFloppy();
   updateFloaters(dt);
@@ -3274,6 +4712,11 @@ function start(data) {
   updateHud();
   requestAnimationFrame(t => { last = t; requestAnimationFrame(loop); });
   if (state.introDone) { setPhase("done"); fadeEl.hidden = true; startEl.hidden = true; game.classList.remove("intro"); showHint(); }
+  else {
+    let fresh = false;
+    try { fresh = sessionStorage.getItem("ol-skip-intro") === "1"; sessionStorage.removeItem("ol-skip-intro"); } catch (e) {}
+    if (fresh) { startEl.hidden = true; game.classList.remove("intro"); fadeEl.hidden = false; fadeEl.style.opacity = 1; setPhase("fade"); }
+  }
   camFX = player.x; camFY = player.y;
 }
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
